@@ -1,0 +1,96 @@
+@import 'tailwindcss';
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../storage/framework/views/*.php';
+@source '../views';
+@source '../../app';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+    --font-sans: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
+
+    /* Warna logo BPS */
+    --color-bps-blue: #00a3e0;
+    --color-bps-blue-50: #e8f7fd;
+    --color-bps-blue-100: #c9edfa;
+    --color-bps-blue-600: #0089c0;
+    --color-bps-blue-700: #006e9c;
+    --color-bps-orange: #f5951f;
+    --color-bps-orange-50: #fef4e7;
+    --color-bps-orange-100: #fde3c2;
+    --color-bps-orange-600: #dc7c08;
+    --color-bps-orange-700: #b36306;
+    --color-bps-green: #8cc63f;
+    --color-bps-green-50: #f2f9e8;
+    --color-bps-green-100: #e0f0c9;
+    --color-bps-green-600: #6fa628;
+    --color-bps-green-700: #57841f;
+
+    /* Navy tinta (sidebar & teks utama) */
+    --color-navy-50: #eef3f9;
+    --color-navy-100: #dce5f0;
+    --color-navy-300: #8ea5c2;
+    --color-navy-500: #4a6688;
+    --color-navy-700: #123a63;
+    --color-navy-800: #0e3054;
+    --color-navy-900: #0b2a4a;
+    --color-navy-950: #071d35;
+
+    --color-paper: #f4f7fb;
+    --color-line: #dce4ee;
+
+    --animate-pop: pop 0.18s ease-out;
+    --animate-slide-up: slide-up 0.22s ease-out;
+
+    @keyframes pop { from { opacity: 0; transform: scale(0.97); } to { opacity: 1; transform: scale(1); } }
+    @keyframes slide-up { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+}
+
+@layer base {
+    html { -webkit-tap-highlight-color: transparent; }
+    body { @apply bg-paper text-navy-900 antialiased; font-feature-settings: 'tnum' 1, 'cv11' 1; }
+    [x-cloak] { display: none !important; }
+    :focus-visible { @apply outline-2 outline-offset-2 outline-bps-blue; }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+}
+
+@layer components {
+    .card { @apply rounded-2xl border border-line bg-white; }
+    .card-pad { @apply p-4 sm:p-5; }
+
+    .btn { @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 whitespace-nowrap; }
+    .btn-sm { @apply px-3 py-1.5 text-xs rounded-lg; }
+    .btn-primary { @apply bg-navy-900 text-white hover:bg-navy-700; }
+    .btn-blue { @apply bg-bps-blue text-white hover:bg-bps-blue-600; }
+    .btn-green { @apply bg-bps-green-600 text-white hover:bg-bps-green-700; }
+    .btn-orange { @apply bg-bps-orange text-white hover:bg-bps-orange-600; }
+    .btn-danger { @apply bg-rose-600 text-white hover:bg-rose-700; }
+    .btn-ghost { @apply border border-line bg-white text-navy-900 hover:bg-navy-50; }
+    .btn-quiet { @apply text-navy-500 hover:bg-navy-50 hover:text-navy-900; }
+
+    .label { @apply mb-1.5 block text-sm font-medium text-navy-700; }
+    .input { @apply block w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm text-navy-900 placeholder:text-navy-300 focus:border-bps-blue focus:ring-4 focus:ring-bps-blue/15 focus:outline-none; }
+    .input-error { @apply border-rose-400 focus:border-rose-500 focus:ring-rose-500/15; }
+    .error { @apply mt-1 text-xs font-medium text-rose-600; }
+    .hint { @apply mt-1 text-xs text-navy-500; }
+    .checkbox { @apply size-4 rounded accent-bps-blue; }
+
+    .chip { @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ring-inset whitespace-nowrap; }
+
+    .nav-link { @apply flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-navy-100/75 transition hover:bg-white/5 hover:text-white; }
+    .nav-link.active { @apply bg-white/10 text-white; box-shadow: inset 3px 0 0 var(--color-bps-orange); }
+
+    .table-head { @apply bg-navy-50/60 text-left text-xs font-semibold text-navy-500; }
+
+    .tab { @apply rounded-lg px-3 py-1.5 text-sm font-medium text-navy-500 hover:text-navy-900; }
+    .tab.active { @apply bg-white text-navy-900 shadow-sm ring-1 ring-line; }
+
+    /* Bar poin bersudut miring — gema bentuk jajar genjang logo BPS */
+    .slant { clip-path: polygon(6px 0, 100% 0, calc(100% - 6px) 100%, 0 100%); }
+    .slant-track { @apply relative h-3 overflow-hidden bg-navy-50; clip-path: polygon(6px 0, 100% 0, calc(100% - 6px) 100%, 0 100%); }
+
+    /* Kanban: kartu yang sedang diseret */
+    .sortable-ghost { @apply opacity-40; }
+    .sortable-chosen { @apply ring-2 ring-bps-blue/40; }
+}

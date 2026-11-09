@@ -72,7 +72,8 @@ class Dashboard extends Component
             return collect();
         }
         if ($u->is_pimpinan || $u->is_admin) {
-            return User::pegawai()->orderBy('name')->get();
+            // Hanya pegawai yang sudah masuk tim (akun baru tanpa tim tidak ikut dipantau)
+            return User::pegawai()->whereHas('teams')->orderBy('name')->get();
         }
 
         return User::pegawai()->whereHas('teams', fn ($q) => $q->whereIn('teams.id', $u->ledTeamIds()))->orderBy('name')->get();

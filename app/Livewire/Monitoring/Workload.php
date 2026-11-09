@@ -61,7 +61,7 @@ class Workload extends Component
     public function rows()
     {
         $u = Auth::user();
-        $q = User::pegawai()->with('teams');
+        $q = User::pegawai()->whereHas('teams')->with('teams');
         if ($this->team) {
             $q->whereHas('teams', fn ($w) => $w->where('teams.id', $this->team));
         } elseif (! $u->is_pimpinan && ! $u->is_admin) {

@@ -174,7 +174,7 @@
                             <a href="{{ route('tasks.show', $t) }}" wire:navigate class="flex items-center gap-3 px-5 py-3 hover:bg-paper/70">
                                 <x-avatar :user="$t->assignee" size="xs" />
                                 <p class="min-w-0 flex-1 truncate text-sm">{{ $t->title }}</p>
-                                <span class="text-xs font-semibold text-rose-600">{{ tgl($t->effectiveDueDate(), 'j M') }}</span>
+                                <span class="text-xs font-semibold whitespace-nowrap text-rose-600">{{ tgl($t->effectiveDueDate(), 'j M') }}</span>
                             </a>
                         @empty
                             <p class="px-5 pb-5 text-sm text-navy-500">Tidak ada tugas terlambat.</p>

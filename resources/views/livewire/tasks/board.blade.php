@@ -67,9 +67,9 @@
             </div>
         @endif
 
-        <div class="-mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto px-4 pb-4 sm:-mx-6 sm:px-6 xl:mx-0 xl:grid xl:grid-cols-5 xl:overflow-visible xl:px-0">
+        <div class="-mx-4 flex snap-x snap-mandatory gap-4 overflow-x-auto px-4 pb-4 sm:-mx-6 sm:px-6 2xl:mx-0 2xl:grid 2xl:grid-cols-5 2xl:overflow-visible 2xl:px-0">
             @foreach ($this->columns as $status => $tasks)
-                <section class="flex w-[82vw] max-w-xs shrink-0 snap-start flex-col rounded-2xl bg-navy-50/70 sm:w-72 xl:w-auto xl:max-w-none" wire:key="col-{{ $status }}">
+                <section class="flex w-[82vw] max-w-xs shrink-0 snap-start flex-col rounded-2xl bg-navy-50/70 sm:w-72 2xl:w-auto 2xl:max-w-none" wire:key="col-{{ $status }}">
                     <header class="px-3.5 pt-3.5 pb-2.5">
                         <div class="flex items-center gap-2">
                             <span class="slant h-3 w-5 shrink-0 {{ $colStyle[$status][1] }}"></span>

@@ -11,14 +11,14 @@
         <div class="slant-track mt-2.5 h-1.5"><div class="absolute inset-y-0 left-0 bg-bps-blue" style="width: {{ $t->progress }}%"></div></div>
     @endif
 
-    <div class="mt-3 flex items-center gap-2">
+    <div class="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1.5">
         <x-priority :priority="$t->priority" />
         @if ($due)
-            <span class="inline-flex items-center gap-1 text-[11px] font-medium {{ $t->isOverdue() ? 'text-rose-600' : ($t->isDueSoon() ? 'text-bps-orange-700' : 'text-navy-500') }}">
+            <span class="inline-flex items-center gap-1 text-[11px] font-medium whitespace-nowrap {{ $t->isOverdue() ? 'text-rose-600' : ($t->isDueSoon() ? 'text-bps-orange-700' : 'text-navy-500') }}">
                 <x-icon name="clock" class="size-3.5" />{{ tgl($due, 'j M') }}
             </span>
         @endif
-        <span class="ml-auto flex items-center gap-2 text-[11px] text-navy-300">
+        <span class="ml-auto flex shrink-0 items-center gap-2 text-[11px] text-navy-300">
             @if ($t->attachments_count)<span class="inline-flex items-center gap-0.5"><x-icon name="clip" class="size-3.5" />{{ $t->attachments_count }}</span>@endif
             @if ($t->comments_count)<span class="inline-flex items-center gap-0.5"><x-icon name="chat" class="size-3.5" />{{ $t->comments_count }}</span>@endif
             @if ($t->children_count)<span class="inline-flex items-center gap-0.5" title="Sub-tugas"><x-icon name="forward" class="size-3.5" />{{ $t->children_count }}</span>@endif

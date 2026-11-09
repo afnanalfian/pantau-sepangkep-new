@@ -25,7 +25,7 @@ Fitur yang butuh layanan latar belakang:
 - **Queue worker** (supervisor) → upload file ke Google Drive & tugas berat lain.
 - **Scheduler** (cron tiap menit) → pengingat deadline, eskalasi SLA verifikasi, peringatan dini.
 - **HTTPS** → wajib agar notifikasi push ke HP bisa jalan.
-
+git push -u origin tall
 ---
 
 ## 1. Backup project lama

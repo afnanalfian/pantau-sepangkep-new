@@ -29,7 +29,16 @@ class Settings extends Component
         $all = AppSettings::all();
         $this->s = [
             'office_name' => $all['office_name'],
-            'default_monthly_target' => (int) $all['default_monthly_target'],
+            'bobot_tugas' => (float) $all['bobot_tugas'],
+            'bobot_apel' => (float) $all['bobot_apel'],
+            'bobot_rapat' => (float) $all['bobot_rapat'],
+            'batas_potongan' => (float) $all['batas_potongan'],
+            'potongan_ringan' => (float) $all['potongan_ringan'],
+            'potongan_berat' => (float) $all['potongan_berat'],
+            'beban_ringan' => (int) $all['beban_ringan'],
+            'beban_padat' => (int) $all['beban_padat'],
+            'format_surat_keluar' => $all['format_surat_keluar'],
+            'format_surat_masuk' => $all['format_surat_masuk'],
             'sla_hours' => (int) $all['sla_hours'],
             'sla_action' => $all['sla_action'],
             'reminder_hours' => (int) $all['reminder_hours'],
@@ -42,13 +51,27 @@ class Settings extends Component
     {
         $this->validate([
             's.office_name' => 'required|string|max:150',
-            's.default_monthly_target' => 'required|integer|min:10|max:400',
+            's.bobot_tugas' => 'required|numeric|min:0|max:100',
+            's.bobot_apel' => 'required|numeric|min:0|max:100',
+            's.bobot_rapat' => 'required|numeric|min:0|max:100',
+            's.batas_potongan' => 'required|numeric|min:0|max:99.99',
+            's.potongan_ringan' => 'required|numeric|min:0|max:100',
+            's.potongan_berat' => 'required|numeric|min:0|max:100',
+            's.beban_ringan' => 'required|integer|min:1|max:50',
+            's.beban_padat' => 'required|integer|min:1|max:100|gte:s.beban_ringan',
+            's.format_surat_keluar' => 'required|string|max:120',
+            's.format_surat_masuk' => 'required|string|max:120',
             's.sla_hours' => 'required|integer|min:4|max:240',
             's.sla_action' => 'required|in:escalate,auto_approve',
             's.reminder_hours' => 'required|integer|min:1|max:168',
             's.primary_pimpinan_id' => 'nullable|exists:users,id',
             's.require_output_on_submit' => 'boolean',
         ]);
+        if ((float) $this->s['bobot_tugas'] + (float) $this->s['bobot_apel'] + (float) $this->s['bobot_rapat'] <= 0) {
+            $this->addError('s.bobot_tugas', 'Minimal satu bobot harus lebih dari 0.');
+
+            return;
+        }
         foreach ($this->s as $k => $v) {
             AppSettings::set($k, $v === '' ? null : $v);
         }

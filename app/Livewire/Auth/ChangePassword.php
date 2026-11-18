@@ -3,8 +3,6 @@
 namespace App\Livewire\Auth;
 
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Validation\Rules\Password;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Component;
@@ -23,20 +21,12 @@ class ChangePassword extends Component
     {
         $user = Auth::user();
         $rules = [
-            'password' => ['required', 'confirmed', Password::min(8)->letters()->numbers(), 'different:current_password'],
+            'password' => ['required', 'string', 'min:8', 'confirmed'],
         ];
         if (! $user->must_change_password) {
             $rules['current_password'] = ['required', 'current_password'];
         }
-        $this->validate($rules, [
-            'password.different' => 'Password baru harus berbeda dari password lama.',
-        ], ['password' => 'password baru', 'current_password' => 'password lama']);
-
-        if (Hash::check($this->password, $user->password)) {
-            $this->addError('password', 'Password baru tidak boleh sama dengan password awal.');
-
-            return;
-        }
+        $this->validate($rules, [], ['password' => 'password baru', 'current_password' => 'password lama']);
 
         $user->forceFill([
             'password' => $this->password,

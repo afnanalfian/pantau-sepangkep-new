@@ -20,7 +20,7 @@
         <div>
             <label class="label" for="password">Password baru</label>
             <input wire:model="password" id="password" type="password" class="input @error('password') input-error @enderror" autocomplete="new-password">
-            <p class="hint">Minimal 8 karakter, berisi huruf dan angka.</p>
+            <p class="hint">Minimal 8 karakter.</p>
             @error('password') <p class="error">{{ $message }}</p> @enderror
         </div>
         <div>

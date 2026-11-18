@@ -81,7 +81,8 @@ class Users extends Component
         $this->generatedPassword = null;
         $this->form = [
             'username' => '', 'password' => Str::lower(Str::random(4)).random_int(1000, 9999), 'name' => '', 'nip' => '',
-            'jabatan' => '', 'email' => '', 'is_admin' => false, 'is_pimpinan' => false, 'is_active' => true, 'monthly_target' => null,
+            'jabatan' => '', 'email' => '', 'is_admin' => false, 'is_pimpinan' => false, 'is_pegawai' => true,
+            'is_petugas_presensi' => false, 'is_keuangan' => false, 'is_active' => true,
         ];
         $this->formTeams = [];
         $this->showForm = true;
@@ -93,7 +94,7 @@ class Users extends Component
         $u = User::with('teams')->findOrFail($id);
         $this->editId = $u->id;
         $this->generatedPassword = null;
-        $this->form = $u->only(['username', 'name', 'nip', 'jabatan', 'email', 'is_admin', 'is_pimpinan', 'is_active', 'monthly_target']) + ['password' => ''];
+        $this->form = $u->only(['username', 'name', 'nip', 'jabatan', 'email', 'is_admin', 'is_pimpinan', 'is_pegawai', 'is_petugas_presensi', 'is_keuangan', 'is_active']) + ['password' => ''];
         $this->formTeams = $u->teams->mapWithKeys(fn ($t) => [$t->id => $t->pivot->role])->all();
         $this->showForm = true;
     }
@@ -103,19 +104,18 @@ class Users extends Component
         $this->form['username'] = UserImporter::normalizeUsername((string) ($this->form['username'] ?? ''));
         $this->validate([
             'form.username' => ['required', 'string', 'max:100', Rule::unique('users', 'username')->ignore($this->editId)],
-            'form.password' => [$this->editId ? 'nullable' : 'required', 'string', 'min:6'],
+            'form.password' => [$this->editId ? 'nullable' : 'required', 'string', 'min:8'],
             'form.name' => 'nullable|string|max:150',
             'form.nip' => 'nullable|string|max:30',
             'form.jabatan' => 'nullable|string|max:150',
             'form.email' => 'nullable|email|max:150',
-            'form.monthly_target' => 'nullable|integer|min:1|max:400',
-        ], [], ['form.username' => 'username', 'form.password' => 'password', 'form.monthly_target' => 'target poin']);
+        ], [], ['form.username' => 'username', 'form.password' => 'password']);
 
-        $data = collect($this->form)->only(['username', 'name', 'nip', 'jabatan', 'email', 'is_admin', 'is_pimpinan', 'is_active', 'monthly_target'])
+        $data = collect($this->form)->only(['username', 'name', 'nip', 'jabatan', 'email', 'is_admin', 'is_pimpinan', 'is_pegawai', 'is_petugas_presensi', 'is_keuangan', 'is_active'])
             ->map(fn ($v) => $v === '' ? null : $v)->all();
-        $data['is_admin'] = (bool) $data['is_admin'];
-        $data['is_pimpinan'] = (bool) $data['is_pimpinan'];
-        $data['is_active'] = (bool) $data['is_active'];
+        foreach (['is_admin', 'is_pimpinan', 'is_pegawai', 'is_petugas_presensi', 'is_keuangan', 'is_active'] as $f) {
+            $data[$f] = (bool) ($data[$f] ?? false);
+        }
 
         if ($this->editId === Auth::id() && ! $data['is_admin']) {
             $this->addError('form.is_admin', 'Anda tidak bisa mencabut hak admin diri sendiri.');
@@ -222,6 +222,9 @@ class Users extends Component
             ->when($this->role === 'admin', fn ($q) => $q->where('is_admin', true))
             ->when($this->role === 'pimpinan', fn ($q) => $q->where('is_pimpinan', true))
             ->when($this->role === 'ketua', fn ($q) => $q->whereHas('ledTeams'))
+            ->when($this->role === 'presensi', fn ($q) => $q->where('is_petugas_presensi', true))
+            ->when($this->role === 'keuangan', fn ($q) => $q->where('is_keuangan', true))
+            ->when($this->role === 'bukan_pegawai', fn ($q) => $q->where('is_pegawai', false))
             ->when($this->status === 'aktif', fn ($q) => $q->where('is_active', true))
             ->when($this->status === 'nonaktif', fn ($q) => $q->where('is_active', false))
             ->when($this->status === 'belum_ganti', fn ($q) => $q->where('must_change_password', true))

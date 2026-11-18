@@ -6,7 +6,6 @@ use App\Livewire\Concerns\Toasts;
 use App\Services\KinerjaService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Validation\Rules\Password;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 use Livewire\WithFileUploads;
@@ -61,7 +60,7 @@ class Profile extends Component
     {
         $this->validate([
             'current_password' => ['required', 'current_password'],
-            'password' => ['required', 'confirmed', Password::min(8)->letters()->numbers()],
+            'password' => ['required', 'string', 'min:8', 'confirmed'],
         ], [], ['current_password' => 'password lama', 'password' => 'password baru']);
 
         Auth::user()->forceFill(['password' => $this->password, 'password_changed_at' => now()])->save();

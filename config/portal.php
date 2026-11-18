@@ -30,7 +30,7 @@ return [
 
     'siku' => [
         ['label' => 'Arsip SPJ menurut bulan', 'emoji' => '🗄️', 'url' => 'https://drive.google.com/drive/u/0/folders/1pY2gGTFASSZ5D5s7MGd9q93CGfUjDeR4'],
-        ['label' => 'Monitoring pencairan SPJ', 'emoji' => '📊', 'url' => 'https://docs.google.com/spreadsheets/d/19verMBNt4-wUiUKS8pS9aTxqvZmYJDOOIWRyLH8FFEU/edit?gid=0#gid=0'],
+        ['label' => 'Monitoring pencairan SPJ', 'emoji' => '📊', 'url' => 'https://script.google.com/macros/s/AKfycbydaJAPYqL65SmCv0BeWtW2bFZ16VXCtM7kxvzUNQVNvdvYqPPe63_JhypCSqnSsf4n/exec'],
         ['label' => 'Revisi anggaran', 'emoji' => '📝', 'url' => 'https://docs.google.com/spreadsheets/d/1CQDD2J07Hm39rzJ2QBJwDs6gUU5ejXSj/edit?gid=1973722993#gid=1973722993'],
         ['label' => 'Arsip SPJ menurut RO', 'emoji' => '🧾', 'url' => 'https://drive.google.com/drive/folders/1q2aOlunflr6X_Fe-oEcrKHV_0sXP0CRg'],
         ['label' => 'Kelengkapan dokumen SPJ', 'emoji' => '✅', 'url' => 'https://drive.google.com/drive/u/0/folders/1I-97nwWmhQKMkLfgmNAfGK6hD5tB_lYy'],

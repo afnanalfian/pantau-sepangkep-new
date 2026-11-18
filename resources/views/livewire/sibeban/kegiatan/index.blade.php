@@ -112,7 +112,7 @@
                     <label>
                         <span class="text-slate-600">Tim</span>
                         <input type="text" wire:model="tim" list="daftar-tim" class="mt-1 w-full rounded-lg px-3 py-2 ring-1 ring-slate-300">
-                        <datalist id="daftar-tim">@foreach (\App\Livewire\Kegiatan\Index::TIM as $t)<option value="{{ $t }}">@endforeach</datalist>
+                        <datalist id="daftar-tim">@foreach (\App\Livewire\Sibeban\Kegiatan\Index::TIM as $t)<option value="{{ $t }}">@endforeach</datalist>
                     </label>
                     <label>
                         <span class="text-slate-600">Tanggal mulai</span>

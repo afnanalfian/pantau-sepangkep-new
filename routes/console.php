@@ -8,7 +8,7 @@ Schedule::command('pantau:reminders')->everyFifteenMinutes()->withoutOverlapping
 // Early warning pegawai pasif/tanpa tugas: hari kerja pukul 09.00
 Schedule::command('pantau:early-warning')->weekdays()->at('09:00');
 
-// Gerbang kecepatan mingguan (Yellow Alert): Jumat 17.00
+// Peringatan tugas lewat deadline bulan berjalan: Jumat 17.00
 Schedule::command('pantau:early-warning --weekly')->fridays()->at('17:00');
 
 // Bersihkan notifikasi lama (> 120 hari) & job gagal lama

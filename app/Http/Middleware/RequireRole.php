@@ -16,9 +16,12 @@ class RequireRole
             'admin' => $u?->is_admin,
             'pimpinan' => $u?->is_pimpinan || $u?->is_admin,
             'monitor' => $u?->canMonitor(),
+            'presensi' => $u?->canPresensi(),
+            'matriks' => $u?->canMatriks(),
             default => false,
         };
-        abort_unless($ok, 403, 'Halaman ini hanya untuk '.($role === 'monitor' ? 'pimpinan / ketua tim' : $role).'.');
+        $who = ['monitor' => 'pimpinan / ketua tim', 'presensi' => 'petugas presensi', 'matriks' => 'pimpinan, ketua tim, dan keuangan'][$role] ?? $role;
+        abort_unless($ok, 403, 'Halaman ini hanya untuk '.$who.'.');
 
         return $next($request);
     }

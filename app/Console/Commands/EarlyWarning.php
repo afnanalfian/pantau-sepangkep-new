@@ -4,45 +4,43 @@ namespace App\Console\Commands;
 
 use App\Models\User;
 use App\Notifications\PantauNotification;
-use App\Services\WorkloadService;
+use App\Services\KinerjaService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Notification;
 
 /**
  * Early warning untuk pimpinan & ketua tim:
  *  - pegawai dorman (tanpa aktivitas > 4 hari kerja) / tanpa tugas aktif
- *  - Jumat sore: progres mingguan di bawah standar (Yellow Alert)
+ *  - Jumat sore: pegawai yang punya tugas lewat deadline bulan ini (berisiko potongan TK)
  */
 class EarlyWarning extends Command
 {
-    protected $signature = 'pantau:early-warning {--weekly : Mode gerbang kecepatan mingguan (Jumat 17.00)}';
+    protected $signature = 'pantau:early-warning {--weekly : Peringatan mingguan tugas lewat deadline (Jumat 17.00)}';
 
     protected $description = 'Peringatan dini pegawai underload / pasif';
 
-    public function handle(WorkloadService $workload): int
+    public function handle(KinerjaService $kinerja): int
     {
         $users = User::pegawai()->with('teams.leaders')->get();
-        $summary = $workload->summarize($users);
+        $summary = $kinerja->matriks($users);
         $pimpinan = User::pegawai()->where('is_pimpinan', true)->get();
 
         if ($this->option('weekly')) {
-            $weekStart = now()->startOfWeek();
-            $low = $users->filter(function ($u) use ($weekStart) {
-                $pts = \App\Models\Task::where('assignee_id', $u->id)->where('status', 'selesai')
-                    ->where('completed_at', '>=', $weekStart)->sum('points');
-
-                return $pts < 20 && ! $u->is_pimpinan;
-            });
-            if ($low->isEmpty()) {
+            $risk = $summary->filter(fn ($s) => ! $s['user']->is_pimpinan && $s['tugas_gagal'] > 0);
+            if ($risk->isEmpty()) {
                 return self::SUCCESS;
             }
-            $this->notifyGrouped($low, $pimpinan, '🟡 Yellow Alert: progres mingguan di bawah 20 poin',
-                fn ($names) => $names.' belum mencapai 20 poin terverifikasi minggu ini.');
+            $this->notifyGrouped($risk->pluck('user'), $pimpinan, '🟡 Peringatan: ada tugas lewat deadline bulan ini',
+                fn ($names) => $names.' punya tugas yang melewati deadline dan belum selesai. Bila tidak selesai sampai akhir bulan, penyelesaian tugasnya turun.');
+            foreach ($risk as $r) {
+                $r['user']->notify(new PantauNotification('overdue', 'Ada '.$r['tugas_gagal'].' tugas lewat deadline bulan ini',
+                    'Selesaikan sebelum akhir bulan agar penyelesaian tugas Anda tidak berkurang.', route('tasks.index')));
+            }
 
             return self::SUCCESS;
         }
 
-        $idle = $summary->filter(fn ($s) => ! $s['user']->is_pimpinan && ($s['activity'] === 'dorman' || $s['active_count'] === 0));
+        $idle = $summary->filter(fn ($s) => ! $s['user']->is_pimpinan && ($s['activity'] === 'dorman' || $s['aktif'] === 0));
         if ($idle->isEmpty()) {
             return self::SUCCESS;
         }

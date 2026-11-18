@@ -2,11 +2,12 @@
 
 namespace App\Livewire;
 
+use App\Models\PresensiKegiatan;
 use App\Models\Task;
 use App\Models\TaskActivity;
 use App\Models\Team;
 use App\Models\User;
-use App\Services\WorkloadService;
+use App\Services\KinerjaService;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Title;
@@ -18,7 +19,7 @@ class Dashboard extends Component
     #[Computed]
     public function me(): array
     {
-        return app(WorkloadService::class)->forUser(Auth::user());
+        return app(KinerjaService::class)->forUser(Auth::user());
     }
 
     #[Computed]
@@ -56,10 +57,15 @@ class Dashboard extends Component
             ->latest('created_at')->latest('id')->limit(8)->get();
     }
 
+    /** Presensi saya bulan ini (5 kegiatan terakhir). */
     #[Computed]
-    public function trend(): array
+    public function myPresensi()
     {
-        return app(WorkloadService::class)->dailyTrend(collect([Auth::id()]), now());
+        $uid = Auth::id();
+
+        return PresensiKegiatan::with(['kehadirans' => fn ($q) => $q->where('user_id', $uid)])
+            ->whereBetween('tanggal', [now()->startOfMonth()->toDateString(), now()->toDateString()])
+            ->orderByDesc('tanggal')->limit(5)->get();
     }
 
     /* ---------------- Pemantauan (pimpinan / ketua tim) ---------------- */
@@ -71,18 +77,18 @@ class Dashboard extends Component
         if (! $u->canMonitor()) {
             return collect();
         }
-        if ($u->is_pimpinan || $u->is_admin) {
-            // Hanya pegawai yang sudah masuk tim (akun baru tanpa tim tidak ikut dipantau)
-            return User::pegawai()->whereHas('teams')->orderBy('name')->get();
+        $q = User::pegawai()->whereHas('teams')->orderBy('name');
+        if (! ($u->is_pimpinan || $u->is_admin)) {
+            $q->whereHas('teams', fn ($w) => $w->whereIn('teams.id', $u->ledTeamIds()));
         }
 
-        return User::pegawai()->whereHas('teams', fn ($q) => $q->whereIn('teams.id', $u->ledTeamIds()))->orderBy('name')->get();
+        return $q->get();
     }
 
     #[Computed]
-    public function workload()
+    public function matriksTim()
     {
-        return app(WorkloadService::class)->summarize($this->monitorUsers);
+        return app(KinerjaService::class)->matriks($this->monitorUsers);
     }
 
     #[Computed]
@@ -92,9 +98,19 @@ class Dashboard extends Component
         if (! ($u->is_pimpinan || $u->is_admin)) {
             return collect();
         }
-        $teams = Team::with('members')->where('is_active', true)->orderBy('sort_order')->get();
+        $m = $this->matriksTim;
 
-        return app(WorkloadService::class)->teamUtilization($teams, now());
+        return Team::with('members')->where('is_active', true)->orderBy('sort_order')->get()->map(function ($t) use ($m) {
+            $rows = $t->members->map(fn ($x) => $m[$x->id] ?? null)->filter();
+            $tot = $rows->sum('tugas_total');
+
+            return [
+                'team' => $t,
+                'pct' => $tot ? round($rows->sum('tugas_selesai') / $tot * 100, 1) : null,
+                'selesai' => $rows->sum('tugas_selesai'),
+                'total' => $tot,
+            ];
+        });
     }
 
     #[Computed]

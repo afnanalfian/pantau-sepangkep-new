@@ -3,7 +3,6 @@
      class="group cursor-grab rounded-xl border border-line bg-white p-3.5 transition hover:border-navy-300 active:cursor-grabbing {{ $t->isOverdue() ? 'border-l-4 border-l-rose-500' : '' }}">
     <div class="flex items-start gap-2">
         <a href="{{ route('tasks.show', $t) }}" wire:navigate wire:sort:ignore class="min-w-0 flex-1 text-sm leading-snug font-semibold text-navy-900 hover:text-bps-blue-700">{{ $t->title }}</a>
-        <span class="shrink-0 rounded-md bg-navy-50 px-1.5 py-0.5 text-[11px] font-bold text-navy-700" title="Poin">{{ poin($t->points) }}</span>
     </div>
     <p class="mt-1 text-[11px] text-navy-500">{{ $t->code }}{{ $t->team ? ' · '.$t->team->name : '' }}{{ $t->type === 'disposisi' ? ' · Disposisi' : '' }}</p>
 

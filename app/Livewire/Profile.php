@@ -3,7 +3,7 @@
 namespace App\Livewire;
 
 use App\Livewire\Concerns\Toasts;
-use App\Services\WorkloadService;
+use App\Services\KinerjaService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rules\Password;
@@ -75,7 +75,7 @@ class Profile extends Component
 
         return view('livewire.profile', [
             'user' => $u,
-            'stats' => app(WorkloadService::class)->forUser($u),
+            'riwayat' => app(KinerjaService::class)->riwayat($u, 12),
             'leave' => $u->currentLeave(),
         ]);
     }

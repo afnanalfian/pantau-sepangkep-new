@@ -173,7 +173,7 @@ Lanjutkan:
 
 ```bash
 # Tabel + akun admin + 6 tim utama + katalog kegiatan standar
-php artisan migrate --force --seed
+php artisan migrate --force --seed   # termasuk limit honor SIBEBAN
 
 # Kunci notifikasi push HP (sekali saja; JANGAN dibuat ulang setelah dipakai)
 php artisan pantau:vapid --write
@@ -285,11 +285,14 @@ autorestart=true
 stopasgroup=true
 killasgroup=true
 user=www-data
+umask=002
 numprocs=2
 redirect_stderr=true
 stdout_logfile=/var/www/pantau-sepangkep/storage/logs/worker.log
-stopwaitsecs=900
+stopwaitsecs=960
 ```
+
+> Pastikan `.env` berisi `DB_QUEUE_RETRY_AFTER=960` (lebih besar dari `--timeout=900`), agar upload besar ke Drive tidak dijalankan dua kali.
 
 ```bash
 sudo supervisorctl reread
@@ -468,7 +471,7 @@ sudo mv ~/WORKER_LAMA.conf.bak /etc/supervisor/conf.d/WORKER_LAMA.conf && sudo s
 | Notifikasi tidak masuk ke iPhone | Harus dibuka dari ikon Layar Utama (bukan tab Safari biasa), iOS ≥ 16.4 |
 | Pengingat deadline tidak terkirim | Cek cron: `php artisan schedule:list`; uji manual `php artisan pantau:reminders` |
 | Error setelah mengubah `.env` | `php artisan optimize:clear && php artisan optimize` |
-| Lupa password admin | `php artisan tinker` → `App\Models\User::where('username','admin')->first()->update(['password'=>'Baru12345','must_change_password'=>true]);` |
+| Lupa password admin | `php -r 'require "vendor/autoload.php"; $app=require "bootstrap/app.php"; $app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap(); App\Models\User::where("username","admin")->first()->forceFill(["password"=>"Baru12345","must_change_password"=>true])->save();'` lalu `php artisan cache:clear` |
 
 ---
 
@@ -479,4 +482,6 @@ sudo mv ~/WORKER_LAMA.conf.bak /etc/supervisor/conf.d/WORKER_LAMA.conf && sudo s
 | `php artisan pantau:vapid --write` | Membuat kunci Web Push (sekali saja) |
 | `php artisan pantau:reminders` | Pengingat deadline, tugas terlambat, eskalasi SLA |
 | `php artisan pantau:early-warning` | Peringatan pegawai tanpa tugas / pasif |
-| `php artisan pantau:early-warning --weekly` | Yellow Alert progres mingguan |
+| `php artisan pantau:early-warning --weekly` | Peringatan tugas lewat deadline bulan berjalan |
+| `php artisan pantau:demo` / `--hapus` | Isi / hapus data demo presentasi (akun `demo.*`, password `demo12345`) |
+| `php artisan honor:import-matriks file.xlsx --tahun=2026` | Impor master mitra & rekap honor ke SIBEBAN |

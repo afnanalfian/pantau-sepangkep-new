@@ -20,7 +20,7 @@ class User extends Authenticatable
 
     protected $fillable = [
         'username', 'name', 'nip', 'jabatan', 'email', 'phone', 'avatar_path', 'password',
-        'is_admin', 'is_pimpinan', 'is_active', 'must_change_password', 'monthly_target',
+        'is_admin', 'is_pimpinan', 'is_pegawai', 'is_petugas_presensi', 'is_keuangan', 'is_active', 'must_change_password', 'monthly_target',
         'password_changed_at', 'last_login_at', 'last_seen_at',
     ];
 
@@ -32,6 +32,9 @@ class User extends Authenticatable
             'password' => 'hashed',
             'is_admin' => 'boolean',
             'is_pimpinan' => 'boolean',
+            'is_pegawai' => 'boolean',
+            'is_petugas_presensi' => 'boolean',
+            'is_keuangan' => 'boolean',
             'is_active' => 'boolean',
             'must_change_password' => 'boolean',
             'password_changed_at' => 'datetime',
@@ -74,10 +77,10 @@ class User extends Authenticatable
         return $q->where('is_active', true);
     }
 
-    /** Pegawai aktif (tanpa akun sistem "admin") – untuk daftar beban kerja & laporan. */
+    /** Pegawai aktif yang dihitung dalam presensi & matriks kinerja (akun admin bawaan tidak termasuk). */
     public function scopePegawai(Builder $q): Builder
     {
-        return $q->where('is_active', true)->where('username', '!=', 'admin');
+        return $q->where('is_active', true)->where('is_pegawai', true);
     }
 
     /* ---------------------------------------------------------------- Atribut */
@@ -150,6 +153,18 @@ class User extends Authenticatable
         return $this->is_pimpinan || $this->is_admin || $this->isLeader();
     }
 
+    /** Akses modul presensi apel & rapat. */
+    public function canPresensi(): bool
+    {
+        return $this->is_admin || $this->is_pimpinan || $this->is_petugas_presensi;
+    }
+
+    /** Lihat & ekspor matriks TK seluruh pegawai. */
+    public function canMatriks(): bool
+    {
+        return $this->is_admin || $this->is_pimpinan || $this->is_keuangan || $this->isLeader();
+    }
+
     public function canMonitor(): bool
     {
         return $this->is_pimpinan || $this->is_admin || $this->isLeader();
@@ -187,6 +202,12 @@ class User extends Authenticatable
         if ($this->isLeader()) {
             $labels[] = 'Ketua Tim';
         }
+        if ($this->is_petugas_presensi) {
+            $labels[] = 'Petugas Presensi';
+        }
+        if ($this->is_keuangan) {
+            $labels[] = 'Keuangan';
+        }
         if (! $labels) {
             $labels[] = 'Pegawai';
         }
@@ -211,10 +232,6 @@ class User extends Authenticatable
         return (bool) $this->currentLeave($date);
     }
 
-    public function monthlyTarget(): int
-    {
-        return (int) ($this->monthly_target ?: Settings::get('default_monthly_target', 100));
-    }
 
     /** Pimpinan utama (penerima eskalasi & pengalihan approval). */
     public static function primaryPimpinan(?int $exceptId = null): ?User

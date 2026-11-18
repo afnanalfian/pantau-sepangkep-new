@@ -30,7 +30,7 @@
                     <x-status :status="$t->status" />
                     <x-priority :priority="$t->priority" />
                     <span class="chip bg-navy-50 text-navy-700 ring-line">{{ \App\Models\Task::TYPES[$t->type] ?? $t->type }}</span>
-                    @if ($t->isOverdue())<span class="chip bg-rose-50 text-rose-700 ring-rose-600/20">Terlambat – poin dibekukan</span>@endif
+                    @if ($t->isOverdue())<span class="chip bg-rose-50 text-rose-700 ring-rose-600/20">Terlambat</span>@endif
                 </div>
                 <h1 class="mt-3 text-xl leading-snug font-extrabold tracking-tight sm:text-2xl">{{ $t->title }}</h1>
 
@@ -117,7 +117,7 @@
                         @foreach ($this->children as $c)
                             <li><a href="{{ route('tasks.show', $c) }}" wire:navigate class="flex items-center gap-3 px-5 py-3 hover:bg-paper/70">
                                 <x-avatar :user="$c->assignee" size="sm" />
-                                <div class="min-w-0 flex-1"><p class="truncate text-sm font-medium">{{ $c->assignee->display_name }}</p><p class="truncate text-xs text-navy-500">{{ $c->code }} · {{ poin($c->points) }} poin</p></div>
+                                <div class="min-w-0 flex-1"><p class="truncate text-sm font-medium">{{ $c->assignee->display_name }}</p><p class="truncate text-xs text-navy-500">{{ $c->code }}{{ $c->due_date ? ' · deadline '.tgl($c->effectiveDueDate(), 'j M') : '' }}</p></div>
                                 <x-status :status="$c->status" />
                             </a></li>
                         @endforeach
@@ -169,11 +169,16 @@
         {{-- ============ Panel samping ============ --}}
         <aside class="space-y-5">
             <section class="card overflow-hidden">
+                @php $mb = $due ? bulan_tahun($due) : null; @endphp
                 <div class="bg-navy-900 p-5 text-white">
-                    <p class="text-xs text-navy-100/70">Bobot tugas</p>
-                    <p class="text-4xl font-extrabold">{{ poin($t->points) }} <span class="text-base font-semibold text-navy-100/70">poin</span></p>
+                    <p class="text-xs text-navy-100/70">Masuk matriks bulan</p>
+                    <p class="text-2xl font-extrabold">{{ $mb ?? 'Belum ada deadline' }}</p>
                     <p class="mt-1 text-xs text-navy-100/70">
-                        @if ($t->catalog) {{ poin($t->quantity) }} {{ $t->catalog->unit }} × {{ poin($t->catalog->points) }} poin @else {{ poin($t->quantity) }} jam × koef. {{ \App\Models\Task::COMPLEXITY[$t->complexity]['coef'] ?? 1 }} @endif
+                        @if ($t->status === 'selesai')
+                            Selesai {{ tgl($t->completed_at) }}{{ $due && $t->completed_at->gt($due->copy()->endOfMonth()) ? ' — lewat bulan deadline, dihitung di bulan penyelesaian' : '' }}
+                        @else
+                            Harus diverifikasi selesai paling lambat {{ $due ? tgl($due->copy()->endOfMonth()) : '–' }}
+                        @endif
                     </p>
                 </div>
                 <dl class="divide-y divide-line text-sm">
@@ -186,7 +191,6 @@
                         </div>
                     @endforeach
                     <div class="flex px-5 py-3"><dt class="w-28 text-navy-500">Tim</dt><dd class="font-medium">{{ $t->team?->name ?? '–' }}</dd></div>
-                    @if ($t->catalog)<div class="flex px-5 py-3"><dt class="w-28 shrink-0 text-navy-500">Kegiatan</dt><dd class="font-medium">{{ $t->catalog->name }}@if($t->catalog->rhk)<span class="mt-0.5 block text-xs font-normal text-navy-500">RHK: {{ $t->catalog->rhk }}</span>@endif</dd></div>@endif
                     <div class="flex px-5 py-3"><dt class="w-28 text-navy-500">Mulai</dt><dd class="font-medium">{{ tgl($t->start_date) }}</dd></div>
                     <div class="flex px-5 py-3"><dt class="w-28 text-navy-500">Deadline</dt>
                         <dd class="font-medium {{ $t->isOverdue() ? 'text-rose-600' : '' }}">
@@ -229,13 +233,13 @@
     @php
         $modals = [
             'submit' => ['Tandai tugas selesai', 'Hasil kerja akan dikirim ke '.($t->verifier?->display_name ?? 'verifikator').' untuk diverifikasi.', 'Kirim untuk verifikasi', 'btn-green', 'Catatan untuk verifikator (opsional)'],
-            'approve' => ['Setujui hasil kerja', 'Poin '.poin($t->points).' akan tercatat sebagai poin terverifikasi '.$t->assignee->display_name.'.', 'Setujui', 'btn-green', 'Catatan (opsional)'],
+            'approve' => ['Setujui hasil kerja', 'Tugas akan tercatat selesai untuk '.$t->assignee->display_name.'.', 'Setujui', 'btn-green', 'Catatan (opsional)'],
             'revise' => ['Minta revisi', 'Jelaskan apa yang perlu diperbaiki. Tugas kembali ke pelaksana.', 'Kirim permintaan revisi', 'btn-orange', 'Catatan revisi (wajib)'],
-            'accept' => ['Setujui pengajuan mandiri', 'Tugas masuk ke daftar kerja '.$t->assignee->display_name.' dan poinnya dihitung setelah selesai diverifikasi.', 'Setujui pengajuan', 'btn-green', null],
+            'accept' => ['Setujui pengajuan mandiri', 'Tugas masuk ke daftar kerja '.$t->assignee->display_name.' dan ikut dihitung pada matriks bulan deadline-nya.', 'Setujui pengajuan', 'btn-green', null],
             'reject' => ['Tolak pengajuan', 'Beri alasan penolakan agar pegawai memahami.', 'Tolak pengajuan', 'btn-danger', 'Alasan (wajib)'],
             'cancel' => ['Batalkan tugas', 'Tugas tidak lagi dihitung dalam beban kerja.', 'Batalkan tugas', 'btn-danger', 'Alasan (opsional)'],
-            'reopen' => ['Buka kembali tugas', 'Status kembali menjadi “Sedang dikerjakan” dan poin terverifikasi ditarik.', 'Buka kembali', 'btn-primary', null],
-            'extension' => ['Ajukan perpanjangan waktu', 'Selama tugas terlambat, poinnya dibekukan dari proyeksi sampai perpanjangan disetujui.', 'Kirim pengajuan', 'btn-blue', 'Alasan (wajib)'],
+            'reopen' => ['Buka kembali tugas', 'Status kembali menjadi “Sedang dikerjakan” dan tugas tidak lagi dihitung selesai.', 'Buka kembali', 'btn-primary', null],
+            'extension' => ['Ajukan perpanjangan waktu', 'Bila disetujui, deadline baru dipakai untuk menentukan bulan perhitungan tugas ini.', 'Kirim pengajuan', 'btn-blue', 'Alasan (wajib)'],
             'delete' => ['Hapus tugas', 'Tugas dihapus dari daftar. Riwayat tetap tersimpan untuk audit.', 'Hapus', 'btn-danger', null],
         ];
         $m = $actionModal ? $modals[$actionModal] : null;

@@ -21,19 +21,68 @@
                 <div class="flex px-5 py-3"><dt class="w-24 shrink-0 text-navy-500">Jabatan</dt><dd class="font-medium">{{ $user->jabatan ?: '–' }}</dd></div>
                 <div class="flex px-5 py-3"><dt class="w-24 shrink-0 text-navy-500">Tim</dt>
                     <dd class="font-medium">@forelse ($user->teams as $t){{ $t->name }}{{ $t->pivot->role === 'ketua' ? ' (Ketua)' : '' }}@if(!$loop->last), @endif @empty – @endforelse</dd></div>
-                <div class="flex px-5 py-3"><dt class="w-24 text-navy-500">Target</dt><dd class="font-medium">{{ poin($stats['target']) }} poin / bulan</dd></div>
                 @if ($leave)<div class="flex px-5 py-3"><dt class="w-24 text-navy-500">Status</dt><dd class="font-medium text-amber-700">{{ $leave->type_label }} s.d. {{ tgl($leave->end_date) }}</dd></div>@endif
             </dl>
             <p class="border-t border-line px-5 py-3 text-xs text-navy-500">Nama, NIP, jabatan, dan tim diatur oleh admin.</p>
         </section>
 
         <div class="space-y-6">
-            <section class="card card-pad">
-                <h2 class="font-bold">Capaian bulan ini</h2>
-                <x-points-bar class="mt-4" height="h-4" :verified="$stats['verified']" :committed="$stats['committed']" :target="$stats['target']" legend />
-                <div class="mt-4 flex flex-wrap gap-2">
-                    <a href="{{ route('portfolio.export') }}" class="btn btn-ghost btn-sm"><x-icon name="download" class="size-4" /> Portofolio bulan ini</a>
-                    <a href="{{ route('portfolio.export', ['periode' => 'triwulan']) }}" class="btn btn-ghost btn-sm"><x-icon name="download" class="size-4" /> Portofolio triwulan (KIPPAPP)</a>
+            @php $now = $riwayat->first(); @endphp
+            <section class="card overflow-hidden">
+                <div class="flex flex-wrap items-center justify-between gap-2 px-5 pt-5">
+                    <div><h2 class="font-bold">Matriks {{ bulan_tahun($now['bulan']) }}</h2><p class="text-xs text-navy-500">Sementara — tugas yang belum jatuh tempo belum dihitung</p></div>
+                    <a href="{{ route('profile.matriks', $now['bulan']->format('Y-m')) }}" class="btn btn-ghost btn-sm"><x-icon name="download" class="size-4" /> PDF</a>
+                </div>
+                <div class="grid gap-5 p-5 sm:grid-cols-[1fr_auto] sm:items-center">
+                    <div class="grid grid-cols-3 gap-3 text-center">
+                        <div><x-ring class="mx-auto" :pct="$now['tugas_pct']" color="text-bps-blue" /><p class="mt-1 text-xs font-semibold">Tugas</p><p class="text-[11px] text-navy-500">{{ $now['tugas_selesai'] }}/{{ $now['tugas_total'] }}</p></div>
+                        <div><x-ring class="mx-auto" :pct="$now['apel_pct']" color="text-bps-orange" /><p class="mt-1 text-xs font-semibold">Apel</p><p class="text-[11px] text-navy-500">{{ $now['apel_hadir'] }}/{{ $now['apel_wajib'] }}</p></div>
+                        <div><x-ring class="mx-auto" :pct="$now['rapat_pct']" color="text-bps-green" /><p class="mt-1 text-xs font-semibold">Rapat</p><p class="text-[11px] text-navy-500">{{ $now['rapat_hadir'] }}/{{ $now['rapat_wajib'] }}</p></div>
+                    </div>
+                    <div class="rounded-2xl bg-navy-900 px-6 py-4 text-center text-white">
+                        <p class="text-xs text-navy-100/70">Nilai akhir</p>
+                        <p class="text-4xl font-extrabold">{{ rtrim(rtrim(number_format($now['nilai'], 2, ',', '.'), '0'), ',') }}%</p>
+                        <x-potongan :value="$now['potongan']" class="mt-2" />
+                    </div>
+                </div>
+                @if ($now['tugas_items']->isNotEmpty())
+                    <details class="border-t border-line">
+                        <summary class="cursor-pointer px-5 py-3 text-sm font-semibold text-bps-blue-700">Lihat {{ $now['tugas_semua'] }} tugas tanggungan bulan ini</summary>
+                        <ul class="divide-y divide-line border-t border-line">
+                            @foreach ($now['tugas_items'] as $it)
+                                <li class="flex items-center gap-3 px-5 py-2.5 text-sm">
+                                    <span class="grid size-6 shrink-0 place-items-center rounded-full {{ $it['done'] ? 'bg-bps-green text-white' : ($it['pending'] ? 'bg-bps-blue-50 text-bps-blue-700' : 'bg-rose-50 text-rose-600') }}"><x-icon :name="$it['done'] ? 'check' : ($it['pending'] ? 'clock' : 'x')" class="size-3.5" /></span>
+                                    <a href="{{ route('tasks.show', $it['task']->id) }}" wire:navigate class="min-w-0 flex-1 truncate hover:text-bps-blue-700">{{ $it['task']->title }}</a>
+                                    @if ($it['carry'])<span class="chip bg-rose-50 text-rose-700 ring-rose-600/20">Tunggakan</span>@endif
+                                    <span class="text-xs whitespace-nowrap text-navy-500">{{ tgl($it['due'], 'j M') }}</span>
+                                </li>
+                            @endforeach
+                        </ul>
+                    </details>
+                @endif
+            </section>
+
+            <section class="card overflow-hidden">
+                <h2 class="px-5 pt-5 font-bold">Riwayat matriks</h2>
+                <div class="mt-3 overflow-x-auto">
+                    <table class="w-full min-w-[560px] text-sm">
+                        <thead class="table-head"><tr>
+                            <th class="px-5 py-2.5">Bulan</th><th class="px-3 py-2.5 text-right">Tugas</th><th class="px-3 py-2.5 text-right">Apel</th>
+                            <th class="px-3 py-2.5 text-right">Rapat</th><th class="px-3 py-2.5 text-right">Nilai</th><th class="px-3 py-2.5 text-right">Potongan</th><th class="px-5 py-2.5"></th></tr></thead>
+                        <tbody class="divide-y divide-line">
+                            @foreach ($riwayat as $h)
+                                <tr>
+                                    <td class="px-5 py-2.5 font-medium">{{ bulan_tahun($h['bulan']) }}@if ($loop->first)<span class="ml-1 text-xs font-normal text-navy-500">(berjalan)</span>@endif</td>
+                                    <td class="px-3 py-2.5 text-right"><x-pct :value="$h['tugas_pct']" :num="$h['tugas_selesai']" :den="$h['tugas_total']" /></td>
+                                    <td class="px-3 py-2.5 text-right"><x-pct :value="$h['apel_pct']" :num="$h['apel_hadir']" :den="$h['apel_wajib']" /></td>
+                                    <td class="px-3 py-2.5 text-right"><x-pct :value="$h['rapat_pct']" :num="$h['rapat_hadir']" :den="$h['rapat_wajib']" /></td>
+                                    <td class="px-3 py-2.5 text-right"><x-pct :value="$h['nilai']" /></td>
+                                    <td class="px-3 py-2.5 text-right"><x-potongan :value="$h['potongan']" /></td>
+                                    <td class="px-5 py-2.5 text-right"><a href="{{ route('profile.matriks', $h['bulan']->format('Y-m')) }}" class="btn btn-quiet p-1.5" title="Unduh PDF"><x-icon name="download" class="size-4" /></a></td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
                 </div>
             </section>
 

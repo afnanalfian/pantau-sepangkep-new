@@ -1,10 +1,4 @@
 <div>
-    <div class="mb-8 lg:hidden">
-        <img src="/images/logo-bps-256.png" alt="BPS" class="h-14">
-        <p class="mt-4 text-2xl font-extrabold tracking-tight">PANTAU SEPANGKEP</p>
-        <p class="text-sm text-navy-500">BPS Kabupaten Pangkajene dan Kepulauan</p>
-    </div>
-
     <h2 class="text-2xl font-extrabold tracking-tight text-navy-900">Masuk</h2>
     <p class="mt-1 text-sm text-navy-500">Gunakan username dan password yang diberikan admin.</p>
 

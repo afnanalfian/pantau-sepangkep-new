@@ -12,18 +12,19 @@
         ['Persetujuan', 'approvals', 'check-circle', true, $approvalCount ?: null],
         ['Kalender', 'calendar', 'calendar', true, null],
         ['Tim Kerja', 'teams.index', 'users', true, null],
-        ['Cuti & Dinas Luar', 'leaves', 'plane', true, null],
     ];
-    $monitorNav = [
-        ['Beban Kerja', 'workload', 'gauge'],
-        ['Laporan Kinerja', 'reports', 'chart'],
-    ];
+    $monitorNav = array_values(array_filter([
+        $me->canMatriks() ? ['Matriks Kinerja & TK', 'matriks', 'chart'] : null,
+        $me->canMonitor() ? ['Beban Kerja', 'workload', 'gauge'] : null,
+        $me->canPresensi() ? ['Presensi Apel & Rapat', 'presensi.index', 'check-circle'] : null,
+    ]));
     $adminNav = [
         ['Pengguna', 'admin.users', 'user'],
         ['Kelola Tim', 'admin.teams', 'swap'],
-        ['Katalog Kegiatan', 'admin.catalog', 'book'],
+        ['Cuti & Dinas Luar', 'admin.leaves', 'plane'],
         ['Pengaturan', 'admin.settings', 'cog'],
     ];
+    $inPortal = $inPortal ?? false;
 @endphp
 <body class="min-h-dvh" data-auth="1"
       x-data="{ sidebar: false }" x-on:keydown.window.ctrl.k.prevent="$refs.search?.focus()">
@@ -52,12 +53,12 @@
                 @endforeach
             </div>
 
-            @if ($me->canMonitor())
+            @if ($monitorNav)
                 <div>
-                    <p class="px-3 pb-2 text-xs font-semibold text-navy-100/45">Pemantauan</p>
+                    <p class="px-3 pb-2 text-xs font-semibold text-navy-100/45">Kinerja</p>
                     <div class="space-y-0.5">
                         @foreach ($monitorNav as [$label, $route, $icon])
-                            <a href="{{ route($route) }}" wire:navigate class="nav-link {{ request()->routeIs($route) ? 'active' : '' }}"><x-icon :name="$icon" class="size-5" />{{ $label }}</a>
+                            <a href="{{ route($route) }}" wire:navigate class="nav-link {{ request()->routeIs(str_replace('.index', '', $route).'*') ? 'active' : '' }}"><x-icon :name="$icon" class="size-5" />{{ $label }}</a>
                         @endforeach
                     </div>
                 </div>
@@ -74,6 +75,18 @@
                 </div>
             @endif
         </nav>
+
+        {{-- Portal Inovasi: sengaja terpisah dari menu utama --}}
+        <div class="px-3 pb-3">
+            <a href="{{ route('portal.home') }}" wire:navigate
+               class="group relative block overflow-hidden rounded-2xl p-3.5 transition {{ $inPortal ? 'bg-white text-navy-900' : 'bg-gradient-to-br from-bps-blue-600 to-navy-800 text-white hover:brightness-110' }}">
+                <span class="pointer-events-none absolute -right-3 -bottom-6 flex rotate-[-14deg] gap-1.5 opacity-40" aria-hidden="true">
+                    <span class="slant h-16 w-4 bg-bps-blue"></span><span class="slant mt-3 h-16 w-4 bg-bps-green"></span><span class="slant -mt-2 h-16 w-4 bg-bps-orange"></span>
+                </span>
+                <span class="relative flex items-center gap-2 text-sm font-extrabold"><x-icon name="sparkles" class="size-4" /> Portal Inovasi</span>
+                <span class="relative mt-0.5 block text-[11px] {{ $inPortal ? 'text-navy-500' : 'text-white/70' }}">SICATUR · SIKU · SIBEBAN · layanan kantor</span>
+            </a>
+        </div>
 
         <div class="border-t border-white/10 p-3">
             <a href="{{ route('profile') }}" wire:navigate class="flex items-center gap-3 rounded-xl p-2 hover:bg-white/5">
@@ -104,6 +117,11 @@
                 </form>
 
                 <div class="ml-auto flex items-center gap-1.5 sm:gap-2">
+                    <a href="{{ route('portal.home') }}" wire:navigate title="Portal Inovasi"
+                       class="inline-flex items-center gap-2 rounded-xl px-2.5 py-2 text-sm font-semibold transition {{ $inPortal ? 'bg-navy-900 text-white' : 'text-navy-700 hover:bg-white' }}">
+                        <svg viewBox="0 0 24 24" class="size-5" fill="currentColor" aria-hidden="true"><rect x="3" y="3" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="2" opacity=".55"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="2" opacity=".55"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2"/></svg>
+                        <span class="hidden xl:inline">Portal Inovasi</span>
+                    </a>
                     <button type="button" class="btn btn-blue hidden sm:inline-flex"
                             @click="$dispatch('open-task-form', { mode: '{{ $me->canAssign() ? 'assign' : 'mandiri' }}' })">
                         <x-icon name="plus" class="size-4" /> {{ $me->canAssign() ? 'Beri tugas' : 'Ajukan tugas' }}

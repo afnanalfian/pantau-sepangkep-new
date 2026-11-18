@@ -60,7 +60,7 @@
                     @foreach ($this->pendingSubmissions as $t)
                         <a href="{{ route('tasks.show', $t) }}" wire:navigate class="w-64 shrink-0 rounded-xl border border-violet-200 bg-white p-3 hover:border-violet-400">
                             <p class="truncate text-sm font-semibold">{{ $t->title }}</p>
-                            <p class="mt-1 text-xs text-navy-500">{{ $t->assignee->display_name }} · {{ poin($t->points) }} poin</p>
+                            <p class="mt-1 text-xs text-navy-500">{{ $t->assignee->display_name }}{{ $t->due_date ? ' · deadline '.tgl($t->due_date, 'j M') : '' }}</p>
                         </a>
                     @endforeach
                 </div>
@@ -76,7 +76,6 @@
                             <h2 class="truncate text-sm font-bold">{{ $colStyle[$status][0] }}</h2>
                             <span class="ml-auto rounded-full bg-white px-2 text-xs font-semibold text-navy-500">{{ $tasks->count() }}</span>
                         </div>
-                        <p class="mt-0.5 pl-7 text-[11px] text-navy-500">{{ poin($tasks->sum('points')) }} poin</p>
                     </header>
                     <div class="flex min-h-40 flex-1 flex-col gap-2.5 px-2.5 pb-3"
                          wire:sort="handleSort" wire:sort:group="tasks" wire:sort:group-id="{{ $status }}">
@@ -100,8 +99,7 @@
                             <th class="px-3 py-3">Pelaksana</th>
                             <th class="px-3 py-3">Status</th>
                             <th class="px-3 py-3">Prioritas</th>
-                            <th class="px-3 py-3">Deadline</th>
-                            <th class="px-5 py-3 text-right">Poin</th>
+                            <th class="px-5 py-3">Deadline</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-line">
@@ -114,11 +112,10 @@
                                 <td class="px-3 py-3"><span class="flex items-center gap-2"><x-avatar :user="$t->assignee" size="xs" /><span class="truncate">{{ $t->assignee->display_name }}</span></span></td>
                                 <td class="px-3 py-3"><x-status :status="$t->status" /></td>
                                 <td class="px-3 py-3"><x-priority :priority="$t->priority" /></td>
-                                <td class="px-3 py-3 text-xs {{ $t->isOverdue() ? 'font-semibold text-rose-600' : 'text-navy-500' }}">{{ $t->effectiveDueDate() ? tgl($t->effectiveDueDate()) : '–' }}</td>
-                                <td class="px-5 py-3 text-right font-bold">{{ poin($t->points) }}</td>
+                                <td class="px-5 py-3 text-xs {{ $t->isOverdue() ? 'font-semibold text-rose-600' : 'text-navy-500' }}">{{ $t->effectiveDueDate() ? tgl($t->effectiveDueDate()) : '–' }}</td>
                             </tr>
                         @empty
-                            <tr><td colspan="6"><x-empty icon="clipboard" title="Tidak ada tugas" text="Coba ubah filter atau kata kunci pencarian." /></td></tr>
+                            <tr><td colspan="5"><x-empty icon="clipboard" title="Tidak ada tugas" text="Coba ubah filter atau kata kunci pencarian." /></td></tr>
                         @endforelse
                     </tbody>
                 </table>

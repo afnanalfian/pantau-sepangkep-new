@@ -3,7 +3,6 @@
 namespace App\Livewire\Tasks;
 
 use App\Livewire\Concerns\Toasts;
-use App\Models\ActivityCatalog;
 use App\Models\Task;
 use App\Models\Team;
 use App\Models\User;
@@ -35,12 +34,6 @@ class TaskForm extends Component
 
     public string $description = '';
 
-    public ?int $catalog_id = null;
-
-    public $quantity = 1;
-
-    public string $complexity = 'rendah';
-
     public string $priority = 'sedang';
 
     public ?string $start_date = null;
@@ -52,8 +45,6 @@ class TaskForm extends Component
     public array $assignees = [];
 
     public string $assigneeSearch = '';
-
-    public string $catalogSearch = '';
 
     // Lampiran awal
     public $suratTugas = [];
@@ -88,12 +79,9 @@ class TaskForm extends Component
             $this->parentId = $p->id;
             $this->title = $p->title;
             $this->description = (string) $p->description;
-            $this->catalog_id = $p->catalog_id;
-            $this->complexity = $p->complexity;
             $this->priority = $p->priority;
             $this->due_date = $p->effectiveDueDate()?->toDateString();
             $this->team_id = $p->team_id;
-            $this->quantity = $p->quantity;
         }
 
         if ($this->mode === 'edit' && $task) {
@@ -101,8 +89,7 @@ class TaskForm extends Component
             abort_unless(app(TaskService::class)->canManage($t, $user) || ($t->status === 'pengajuan' && $t->assignee_id === $user->id), 403);
             $this->editId = $t->id;
             $this->fill([
-                'title' => $t->title, 'description' => (string) $t->description, 'catalog_id' => $t->catalog_id,
-                'quantity' => $t->quantity, 'complexity' => $t->complexity, 'priority' => $t->priority,
+                'title' => $t->title, 'description' => (string) $t->description, 'priority' => $t->priority,
                 'start_date' => $t->start_date?->toDateString(), 'due_date' => $t->due_date?->toDateString(),
                 'team_id' => $t->team_id, 'assignees' => [$t->assignee_id],
             ]);
@@ -161,37 +148,7 @@ class TaskForm extends Component
         }
     }
 
-    public function updatedCatalogId($value): void
-    {
-        if ($value && ($c = ActivityCatalog::find($value))) {
-            $this->complexity = $c->complexity;
-            if (! $this->title) {
-                $this->title = $c->name;
-            }
-        }
-    }
-
     /* ----------------------------------------------------------- Computed */
-
-    #[Computed]
-    public function catalogs()
-    {
-        return ActivityCatalog::where('is_active', true)
-            ->when($this->catalogSearch, fn ($q) => $q->where('name', 'like', '%'.$this->catalogSearch.'%'))
-            ->orderBy('rumpun')->orderBy('name')->get();
-    }
-
-    #[Computed]
-    public function selectedCatalog(): ?ActivityCatalog
-    {
-        return $this->catalog_id ? ActivityCatalog::find($this->catalog_id) : null;
-    }
-
-    #[Computed]
-    public function points(): float
-    {
-        return Task::computePoints($this->selectedCatalog, (float) $this->quantity, $this->complexity);
-    }
 
     #[Computed]
     public function candidates()
@@ -224,18 +181,15 @@ class TaskForm extends Component
         $data = $this->validate([
             'title' => 'required|string|max:255',
             'description' => 'nullable|string|max:20000',
-            'catalog_id' => 'nullable|exists:activity_catalogs,id',
-            'quantity' => 'required|numeric|min:0.1|max:9999',
-            'complexity' => 'required|in:rendah,sedang,tinggi',
             'priority' => 'required|in:rendah,sedang,tinggi',
             'start_date' => 'nullable|date',
-            'due_date' => 'nullable|date|after_or_equal:start_date',
+            'due_date' => 'required|date|after_or_equal:start_date',
             'team_id' => 'nullable|exists:teams,id',
             'links.*.url' => 'nullable|string|max:2000',
             'suratTugas.*' => 'file|max:51200',
             'dokumen.*' => 'file|max:51200',
         ], [], [
-            'title' => 'judul tugas', 'quantity' => 'volume / jam', 'due_date' => 'deadline', 'start_date' => 'tanggal mulai',
+            'title' => 'judul tugas', 'due_date' => 'deadline', 'start_date' => 'tanggal mulai',
         ]);
 
         if (in_array($this->mode, ['assign', 'delegate']) && ! $this->assignees) {
@@ -247,10 +201,9 @@ class TaskForm extends Component
         if ($this->mode === 'edit') {
             $task = Task::findOrFail($this->editId);
             $task->fill([
-                'title' => $data['title'], 'description' => $data['description'], 'catalog_id' => $data['catalog_id'],
-                'quantity' => $data['quantity'], 'complexity' => $data['complexity'], 'priority' => $data['priority'],
+                'title' => $data['title'], 'description' => $data['description'], 'priority' => $data['priority'],
                 'start_date' => $data['start_date'], 'due_date' => $data['due_date'], 'team_id' => $data['team_id'],
-                'points' => Task::computePoints($this->selectedCatalog, (float) $data['quantity'], $data['complexity']),
+                'overdue_notified' => false, 'reminder_sent' => false,
             ]);
             if ($this->assignees && $task->assignee_id !== (int) $this->assignees[0] && $service->canManage($task, $user)) {
                 $task->assignee_id = (int) $this->assignees[0];

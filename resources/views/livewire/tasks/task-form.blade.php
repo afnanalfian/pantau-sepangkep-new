@@ -2,10 +2,11 @@
     $u = auth()->user();
     $titles = [
         'assign' => ['Beri tugas', 'Penerima mendapat notifikasi di web dan HP.'],
-        'mandiri' => ['Ajukan tugas mandiri', 'Pengajuan diverifikasi ketua tim (atau pimpinan bila Anda ketua tim) sebelum poinnya dihitung.'],
+        'mandiri' => ['Ajukan tugas mandiri', 'Pengajuan disetujui ketua tim (atau pimpinan bila Anda ketua tim) sebelum masuk daftar kerja.'],
         'delegate' => ['Teruskan ke anggota', 'Pecah tugas ini menjadi sub-tugas untuk anggota tim. Anda yang memverifikasi hasilnya.'],
         'edit' => ['Ubah tugas', null],
     ];
+    $dueMonth = $due_date ? bulan_tahun($due_date) : null;
 @endphp
 <div>
     <x-modal :show="$open" close="close" width="max-w-3xl" :title="$titles[$mode][0]" :subtitle="$titles[$mode][1]">
@@ -19,23 +20,6 @@
         <form wire:submit="save" id="task-form" class="grid gap-5 lg:grid-cols-[1fr_17rem]">
             <div class="space-y-4">
                 <div>
-                    <label class="label" for="tf-catalog">Kegiatan dari katalog</label>
-                    <select wire:model.live="catalog_id" id="tf-catalog" class="input">
-                        <option value="">— Kegiatan ad-hoc (poin = jam kerja × koefisien) —</option>
-                        @foreach ($this->catalogs->groupBy('rumpun') as $rumpun => $items)
-                            <optgroup label="{{ $rumpun ?: 'Lainnya' }}">
-                                @foreach ($items as $c)
-                                    <option value="{{ $c->id }}">{{ $c->name }} ({{ poin($c->points) }} poin / {{ $c->unit }})</option>
-                                @endforeach
-                            </optgroup>
-                        @endforeach
-                    </select>
-                    @if ($this->selectedCatalog?->rhk)
-                        <p class="hint">RHK: {{ $this->selectedCatalog->rhk }}</p>
-                    @endif
-                </div>
-
-                <div>
                     <label class="label" for="tf-title">Judul tugas</label>
                     <input wire:model="title" id="tf-title" class="input @error('title') input-error @enderror" placeholder="mis. Validasi data Susenas Kec. Bungoro">
                     @error('title') <p class="error">{{ $message }}</p> @enderror
@@ -48,14 +32,13 @@
 
                 <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
                     <div>
-                        <label class="label">{{ $this->selectedCatalog ? 'Volume ('.$this->selectedCatalog->unit.')' : 'Estimasi jam' }}</label>
-                        <input wire:model.live.debounce.300ms="quantity" type="number" step="any" min="0.1" class="input @error('quantity') input-error @enderror">
+                        <label class="label">Mulai</label>
+                        <input wire:model="start_date" type="date" class="input">
                     </div>
                     <div>
-                        <label class="label">Kompleksitas</label>
-                        <select wire:model.live="complexity" class="input" @disabled($this->selectedCatalog)>
-                            @foreach (\App\Models\Task::COMPLEXITY as $k => $c)<option value="{{ $k }}">{{ $c['label'] }} ×{{ $c['coef'] }}</option>@endforeach
-                        </select>
+                        <label class="label">Deadline</label>
+                        <input wire:model.live="due_date" type="date" class="input @error('due_date') input-error @enderror">
+                        @error('due_date') <p class="error">{{ $message }}</p> @enderror
                     </div>
                     <div>
                         <label class="label">Prioritas</label>
@@ -69,18 +52,6 @@
                             <option value="">—</option>
                             @foreach ($this->teams as $t)<option value="{{ $t->id }}">{{ $t->name }}</option>@endforeach
                         </select>
-                    </div>
-                </div>
-
-                <div class="grid grid-cols-2 gap-3">
-                    <div>
-                        <label class="label">Mulai</label>
-                        <input wire:model="start_date" type="date" class="input">
-                    </div>
-                    <div>
-                        <label class="label">Deadline</label>
-                        <input wire:model="due_date" type="date" class="input @error('due_date') input-error @enderror">
-                        @error('due_date') <p class="error">{{ $message }}</p> @enderror
                     </div>
                 </div>
 
@@ -106,10 +77,10 @@
                         @if ($suratTugas || $dokumen)
                             <ul class="mt-3 space-y-1.5 text-sm">
                                 @foreach ($suratTugas as $i => $f)
-                                    <li class="flex items-center gap-2 rounded-lg bg-bps-orange-50 px-3 py-1.5"><span class="text-xs font-semibold text-bps-orange-700">Surat tugas</span><span class="min-w-0 flex-1 truncate">{{ $f->getClientOriginalName() }}</span><button type="button" wire:click="removeStaged('suratTugas', {{ $i }})" class="text-navy-300 hover:text-rose-600"><x-icon name="x" class="size-4" /></button></li>
+                                    <li class="flex items-center gap-2 rounded-lg bg-bps-orange-50 px-3 py-1.5"><span class="text-xs font-semibold text-bps-orange-700">Surat tugas</span><span class="min-w-0 flex-1 truncate">{{ $f->getClientOriginalName() }}</span><button type="button" wire:click="removeStaged('suratTugas', {{ $i }})" class="text-navy-300 hover:text-rose-600" aria-label="Hapus"><x-icon name="x" class="size-4" /></button></li>
                                 @endforeach
                                 @foreach ($dokumen as $i => $f)
-                                    <li class="flex items-center gap-2 rounded-lg bg-bps-blue-50 px-3 py-1.5"><span class="text-xs font-semibold text-bps-blue-700">Dokumen</span><span class="min-w-0 flex-1 truncate">{{ $f->getClientOriginalName() }}</span><button type="button" wire:click="removeStaged('dokumen', {{ $i }})" class="text-navy-300 hover:text-rose-600"><x-icon name="x" class="size-4" /></button></li>
+                                    <li class="flex items-center gap-2 rounded-lg bg-bps-blue-50 px-3 py-1.5"><span class="text-xs font-semibold text-bps-blue-700">Dokumen</span><span class="min-w-0 flex-1 truncate">{{ $f->getClientOriginalName() }}</span><button type="button" wire:click="removeStaged('dokumen', {{ $i }})" class="text-navy-300 hover:text-rose-600" aria-label="Hapus"><x-icon name="x" class="size-4" /></button></li>
                                 @endforeach
                             </ul>
                         @endif
@@ -118,7 +89,7 @@
                             <div class="mt-2 flex gap-2" wire:key="link-{{ $i }}">
                                 <input wire:model="links.{{ $i }}.url" placeholder="https://drive.google.com/…" class="input flex-1 py-2">
                                 <input wire:model="links.{{ $i }}.name" placeholder="Nama link" class="input w-36 py-2">
-                                <button type="button" wire:click="removeLink({{ $i }})" class="btn btn-quiet px-2"><x-icon name="x" class="size-4" /></button>
+                                <button type="button" wire:click="removeLink({{ $i }})" class="btn btn-quiet px-2" aria-label="Hapus link"><x-icon name="x" class="size-4" /></button>
                             </div>
                         @endforeach
                         <button type="button" wire:click="addLink" class="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-bps-blue-700 hover:underline"><x-icon name="link" class="size-4" /> Tambah link</button>
@@ -126,18 +97,12 @@
                 @endif
             </div>
 
-            {{-- Kolom kanan: poin & penerima --}}
+            {{-- Kolom kanan --}}
             <div class="space-y-4">
                 <div class="rounded-2xl bg-navy-900 p-4 text-white">
-                    <p class="text-xs text-navy-100/70">Bobot poin tugas</p>
-                    <p class="mt-1 text-4xl font-extrabold">{{ poin($this->points) }}</p>
-                    <p class="mt-1 text-xs text-navy-100/70">
-                        @if ($this->selectedCatalog)
-                            {{ poin($this->selectedCatalog->points) }} × {{ poin((float) $quantity) }} {{ $this->selectedCatalog->unit }} (dikunci katalog)
-                        @else
-                            {{ poin((float) $quantity) }} jam × {{ \App\Models\Task::COMPLEXITY[$complexity]['coef'] }} koefisien
-                        @endif
-                    </p>
+                    <p class="text-xs text-navy-100/70">Dihitung pada matriks bulan</p>
+                    <p class="mt-1 text-2xl font-extrabold">{{ $dueMonth ?? '—' }}</p>
+                    <p class="mt-2 text-xs leading-relaxed text-navy-100/70">Tugas dinilai selesai bila diverifikasi paling lambat akhir bulan deadline. Bila belum, tugas ikut terbawa ke bulan berikutnya.</p>
                     <div class="mt-3 flex h-1" aria-hidden="true"><span class="flex-1 bg-bps-blue"></span><span class="flex-1 bg-bps-green"></span><span class="flex-1 bg-bps-orange"></span></div>
                 </div>
 
@@ -164,7 +129,7 @@
                         </div>
                         @error('assignees') <p class="error">{{ $message }}</p> @enderror
                         @if ($mode === 'assign' && count($assignees) > 1)
-                            <p class="hint">Setiap penerima mendapat tugas sendiri, sehingga poinnya tercatat per orang.</p>
+                            <p class="hint">Setiap penerima mendapat tugas sendiri, sehingga penyelesaiannya tercatat per orang.</p>
                         @endif
                     </div>
                 @endif

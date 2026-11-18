@@ -4,7 +4,7 @@ namespace App\Livewire\Monitoring;
 
 use App\Models\Team;
 use App\Models\User;
-use App\Services\WorkloadService;
+use App\Services\KinerjaService;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Computed;
@@ -23,7 +23,7 @@ class Workload extends Component
     public string $team = '';
 
     #[Url]
-    public string $sort = 'load_asc'; // load_asc | load_desc | name | overdue
+    public string $sort = 'aktif_asc'; // aktif_asc | aktif_desc | name | overdue | pct_asc
 
     #[Url(except: '')]
     public string $level = '';
@@ -68,16 +68,17 @@ class Workload extends Component
             $q->whereHas('teams', fn ($w) => $w->whereIn('teams.id', $u->ledTeamIds()));
         }
 
-        $rows = app(WorkloadService::class)->summarize($q->get(), Carbon::parse($this->month.'-01'));
+        $rows = app(KinerjaService::class)->matriks($q->get(), Carbon::parse($this->month.'-01'));
         if ($this->level) {
-            $rows = $rows->where('level', $this->level);
+            $rows = $rows->where('beban', $this->level);
         }
 
         $sorted = match ($this->sort) {
-            'load_desc' => $rows->sortByDesc('load_pct'),
+            'aktif_desc' => $rows->sortByDesc('aktif'),
             'name' => $rows->sortBy(fn ($r) => $r['user']->display_name),
-            'overdue' => $rows->sortByDesc('overdue_count'),
-            default => $rows->sortBy('load_pct'),
+            'overdue' => $rows->sortByDesc('terlambat'),
+            'pct_asc' => $rows->sortBy(fn ($r) => $r['tugas_pct'] ?? 101),
+            default => $rows->sortBy('aktif'),
         };
 
         return $sorted->values();
@@ -88,7 +89,7 @@ class Workload extends Component
     {
         $all = $this->rows;
 
-        return collect(WorkloadService::LEVELS)->map(fn ($v, $k) => $all->where('level', $k)->count())->all();
+        return collect(KinerjaService::BEBAN)->map(fn ($v, $k) => $all->where('beban', $k)->count())->all();
     }
 
     public function render()

@@ -4,8 +4,33 @@
         <section class="card card-pad">
             <h2 class="font-bold">Aturan kinerja</h2>
             <form wire:submit="save" class="mt-5 grid gap-4 sm:grid-cols-2">
+                @php $tot = (float) ($s['bobot_tugas'] ?? 0) + (float) ($s['bobot_apel'] ?? 0) + (float) ($s['bobot_rapat'] ?? 0); @endphp
+                <fieldset class="rounded-2xl border border-line p-4 sm:col-span-2">
+                    <legend class="px-1 text-sm font-bold">Bobot matriks kinerja</legend>
+                    <div class="grid grid-cols-3 gap-3">
+                        <div><label class="label">Penyelesaian tugas</label><input wire:model.live.debounce.400ms="s.bobot_tugas" type="number" step="any" class="input"></div>
+                        <div><label class="label">Kehadiran apel</label><input wire:model.live.debounce.400ms="s.bobot_apel" type="number" step="any" class="input"></div>
+                        <div><label class="label">Kehadiran rapat</label><input wire:model.live.debounce.400ms="s.bobot_rapat" type="number" step="any" class="input"></div>
+                    </div>
+                    @error('s.bobot_tugas')<p class="error">{{ $message }}</p>@enderror
+                    <p class="hint">Jumlah bobot saat ini {{ $tot + 0 }}. Nilai akhir = Σ(bobot × %) ÷ {{ $tot + 0 }}, sehingga nilai sempurna tetap 100%.
+                        @if ($tot && $tot != 100) Proporsi efektif: tugas {{ round($s['bobot_tugas'] / $tot * 100, 1) }}%, apel {{ round($s['bobot_apel'] / $tot * 100, 1) }}%, rapat {{ round($s['bobot_rapat'] / $tot * 100, 1) }}%.@endif</p>
+                </fieldset>
+                <fieldset class="rounded-2xl border border-line p-4 sm:col-span-2">
+                    <legend class="px-1 text-sm font-bold">Potongan tunjangan kinerja</legend>
+                    <div class="grid grid-cols-3 gap-3">
+                        <div><label class="label">Batas nilai (%)</label><input wire:model="s.batas_potongan" type="number" step="any" class="input"></div>
+                        <div><label class="label">Potongan di atas batas (%)</label><input wire:model="s.potongan_ringan" type="number" step="any" class="input"></div>
+                        <div><label class="label">Potongan ≤ batas (%)</label><input wire:model="s.potongan_berat" type="number" step="any" class="input"></div>
+                    </div>
+                    <p class="hint">Nilai 100% tidak dipotong · di atas {{ $s['batas_potongan'] ?? 80 }}% dipotong {{ $s['potongan_ringan'] ?? 1 }}% · {{ $s['batas_potongan'] ?? 80 }}% ke bawah dipotong {{ $s['potongan_berat'] ?? 2 }}%.</p>
+                </fieldset>
+                <div><label class="label">Beban "ringan" bila tugas aktif kurang dari</label><input wire:model="s.beban_ringan" type="number" class="input"></div>
+                <div><label class="label">Beban "padat" bila tugas aktif lebih dari</label><input wire:model="s.beban_padat" type="number" class="input">@error('s.beban_padat')<p class="error">{{ $message }}</p>@enderror</div>
+                <div><label class="label">Format nomor surat keluar (SICATUR)</label><input wire:model="s.format_surat_keluar" class="input font-mono text-xs"></div>
+                <div><label class="label">Format nomor agenda surat masuk</label><input wire:model="s.format_surat_masuk" class="input font-mono text-xs"></div>
+                <p class="hint -mt-2 sm:col-span-2">Kode yang tersedia: <code>{sifat}</code> <code>{nomor}</code> <code>{klasifikasi}</code> <code>{bulan}</code> <code>{bulan_romawi}</code> <code>{tahun}</code></p>
                 <div class="sm:col-span-2"><label class="label">Nama kantor</label><input wire:model="s.office_name" class="input"></div>
-                <div><label class="label">Target poin default / bulan</label><input wire:model="s.default_monthly_target" type="number" class="input"><p class="hint">PRD: 100–120 poin (5–6 JKE × 20–22 hari).</p></div>
                 <div><label class="label">Pimpinan utama (penerima eskalasi)</label>
                     <select wire:model="s.primary_pimpinan_id" class="input"><option value="">Otomatis</option>@foreach ($pimpinans as $p)<option value="{{ $p->id }}">{{ $p->display_name }}</option>@endforeach</select>
                     @if ($pimpinans->isEmpty())<p class="hint text-bps-orange-700">Belum ada akun berperan Pimpinan. Atur di menu Pengguna.</p>@endif</div>

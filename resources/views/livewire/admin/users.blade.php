@@ -27,7 +27,7 @@
             <input wire:model.live.debounce.300ms="search" type="search" placeholder="Cari username, nama, NIP" class="input py-2 pl-9">
         </div>
         <select wire:model.live="role" class="input w-auto py-2">
-            <option value="">Semua peran</option><option value="admin">Administrator</option><option value="pimpinan">Pimpinan</option><option value="ketua">Ketua tim</option>
+            <option value="">Semua peran</option><option value="admin">Administrator</option><option value="pimpinan">Pimpinan</option><option value="ketua">Ketua tim</option><option value="presensi">Petugas presensi</option><option value="keuangan">Keuangan</option><option value="bukan_pegawai">Bukan pegawai</option>
         </select>
         <select wire:model.live="status" class="input w-auto py-2">
             <option value="">Semua status</option><option value="aktif">Aktif</option><option value="nonaktif">Nonaktif</option><option value="belum_ganti">Belum ganti password</option>
@@ -50,6 +50,9 @@
                                 <div class="flex flex-wrap gap-1">
                                     @if ($u->is_admin)<span class="chip bg-navy-900 text-white ring-navy-900">Admin</span>@endif
                                     @if ($u->is_pimpinan)<span class="chip bg-bps-orange-50 text-bps-orange-700 ring-bps-orange/30">Pimpinan</span>@endif
+                                    @if ($u->is_petugas_presensi)<span class="chip bg-violet-50 text-violet-700 ring-violet-600/20">Presensi</span>@endif
+                                    @if ($u->is_keuangan)<span class="chip bg-emerald-50 text-emerald-700 ring-emerald-600/20">Keuangan</span>@endif
+                                    @unless ($u->is_pegawai)<span class="chip bg-slate-100 text-slate-500 ring-slate-300">Bukan pegawai</span>@endunless
                                     @foreach ($u->teams as $t)
                                         <span class="chip {{ $t->pivot->role === 'ketua' ? 'bg-bps-blue-50 text-bps-blue-700 ring-bps-blue/30' : 'bg-white text-navy-700 ring-line' }}">{{ $t->pivot->role === 'ketua' ? '★ ' : '' }}{{ \Illuminate\Support\Str::after($t->name, 'Tim ') }}</span>
                                     @endforeach
@@ -98,15 +101,17 @@
                     <div><label class="label">NIP</label><input wire:model="form.nip" class="input" inputmode="numeric"></div>
                     <div><label class="label">Jabatan</label><input wire:model="form.jabatan" class="input" placeholder="mis. Statistisi Ahli Pertama"></div>
                     <div><label class="label">Email</label><input wire:model="form.email" type="email" class="input"></div>
-                    <div><label class="label">Target poin / bulan</label><input wire:model="form.monthly_target" type="number" class="input" placeholder="default {{ \App\Support\Settings::get('default_monthly_target') }}"></div>
                 </div>
 
                 <fieldset>
                     <legend class="label">Peran sistem</legend>
                     <div class="grid gap-2 sm:grid-cols-3">
-                        <label class="flex items-center gap-2 rounded-xl border border-line p-3 text-sm"><input type="checkbox" wire:model="form.is_admin" class="checkbox"> Administrator</label>
-                        <label class="flex items-center gap-2 rounded-xl border border-line p-3 text-sm"><input type="checkbox" wire:model="form.is_pimpinan" class="checkbox"> Pimpinan</label>
-                        <label class="flex items-center gap-2 rounded-xl border border-line p-3 text-sm"><input type="checkbox" wire:model="form.is_active" class="checkbox"> Akun aktif</label>
+                        <label class="flex items-start gap-2 rounded-xl border border-line p-3 text-sm"><input type="checkbox" wire:model="form.is_admin" class="checkbox mt-0.5"> <span>Administrator<span class="block text-xs text-navy-500">Kelola akun, tim, cuti, pengaturan</span></span></label>
+                        <label class="flex items-start gap-2 rounded-xl border border-line p-3 text-sm"><input type="checkbox" wire:model="form.is_pimpinan" class="checkbox mt-0.5"> <span>Pimpinan<span class="block text-xs text-navy-500">Disposisi, verifikasi, matriks</span></span></label>
+                        <label class="flex items-start gap-2 rounded-xl border border-line p-3 text-sm"><input type="checkbox" wire:model="form.is_petugas_presensi" class="checkbox mt-0.5"> <span>Petugas presensi<span class="block text-xs text-navy-500">Mencatat kehadiran apel & rapat</span></span></label>
+                        <label class="flex items-start gap-2 rounded-xl border border-line p-3 text-sm"><input type="checkbox" wire:model="form.is_keuangan" class="checkbox mt-0.5"> <span>Keuangan<span class="block text-xs text-navy-500">Lihat & unduh matriks potongan TK</span></span></label>
+                        <label class="flex items-start gap-2 rounded-xl border border-line p-3 text-sm"><input type="checkbox" wire:model="form.is_pegawai" class="checkbox mt-0.5"> <span>Dihitung sebagai pegawai<span class="block text-xs text-navy-500">Ikut presensi & matriks kinerja</span></span></label>
+                        <label class="flex items-start gap-2 rounded-xl border border-line p-3 text-sm"><input type="checkbox" wire:model="form.is_active" class="checkbox mt-0.5"> <span>Akun aktif<span class="block text-xs text-navy-500">Bisa login</span></span></label>
                     </div>
                     @error('form.is_admin')<p class="error">{{ $message }}</p>@enderror
                 </fieldset>

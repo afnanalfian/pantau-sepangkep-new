@@ -9,7 +9,19 @@ use Illuminate\Support\Facades\Schema;
 class Settings
 {
     public const DEFAULTS = [
-        'default_monthly_target' => 100,   // poin / bulan (1 poin = 1 Jam Kerja Efektif)
+        // Matriks kinerja (dasar potongan TK)
+        'bobot_tugas' => 80,
+        'bobot_apel' => 20,
+        'bobot_rapat' => 10,
+        'batas_potongan' => 80,           // nilai ≤ batas → potongan berat
+        'potongan_ringan' => 1,           // % potongan TK bila nilai di atas batas tapi < 100
+        'potongan_berat' => 2,            // % potongan TK bila nilai ≤ batas
+        // Peta beban kerja (jumlah tugas aktif)
+        'beban_ringan' => 2,
+        'beban_padat' => 8,
+        // SICATUR
+        'format_surat_keluar' => '{sifat}-{nomor}/73090/{klasifikasi}/{tahun}',
+        'format_surat_masuk' => 'SM-{nomor}/{tahun}',
         'sla_hours' => 48,                 // batas review ketua tim (jam)
         'sla_action' => 'escalate',        // escalate | auto_approve
         'reminder_hours' => 24,            // pengingat H-1 deadline

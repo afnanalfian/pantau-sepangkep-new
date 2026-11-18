@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use App\Models\ActivityCatalog;
 use App\Models\Task;
 use App\Models\Team;
 use App\Models\User;
@@ -24,7 +23,7 @@ class TaskService
 
     /**
      * Membuat penugasan (pimpinan / ketua tim / admin) untuk satu atau beberapa pegawai.
-     * Setiap penerima mendapat tugasnya sendiri agar poin tercatat per orang.
+     * Setiap penerima mendapat tugasnya sendiri agar penyelesaiannya tercatat per orang.
      *
      * @return Collection<int, Task>
      */
@@ -38,16 +37,9 @@ class TaskService
             throw ValidationException::withMessages(['assignees' => 'Pilih minimal satu pegawai.']);
         }
 
-        $catalog = ! empty($data['catalog_id']) ? ActivityCatalog::find($data['catalog_id']) : null;
-        $quantity = (float) ($data['quantity'] ?? 1);
-        $complexity = $data['complexity'] ?? ($catalog->complexity ?? 'rendah');
-        $points = isset($data['points']) && $data['points'] !== '' && $data['points'] !== null
-            ? (float) $data['points']
-            : Task::computePoints($catalog, $quantity, $complexity);
-
         $type = $actor->is_pimpinan ? 'disposisi' : 'penugasan';
 
-        return DB::transaction(function () use ($data, $assigneeIds, $actor, $parent, $catalog, $quantity, $complexity, $points, $type) {
+        return DB::transaction(function () use ($data, $assigneeIds, $actor, $parent, $type) {
             $tasks = collect();
             foreach ($assigneeIds as $assigneeId) {
                 $assignee = User::findOrFail($assigneeId);
@@ -57,7 +49,6 @@ class TaskService
                     'code' => Task::generateCode(),
                     'parent_id' => $parent?->id,
                     'team_id' => $teamId,
-                    'catalog_id' => $catalog?->id,
                     'creator_id' => $actor->id,
                     'assignee_id' => $assignee->id,
                     'title' => $data['title'],
@@ -65,9 +56,6 @@ class TaskService
                     'type' => $type,
                     'status' => 'todo',
                     'priority' => $data['priority'] ?? 'sedang',
-                    'complexity' => $complexity,
-                    'quantity' => $quantity,
-                    'points' => $points,
                     'start_date' => $data['start_date'] ?? now()->toDateString(),
                     'due_date' => $data['due_date'] ?? null,
                     'position' => 0,
@@ -105,15 +93,10 @@ class TaskService
     /** Pengajuan tugas mandiri (bottom-up) – berstatus "Menunggu Persetujuan". */
     public function submitSelf(array $data, User $actor): Task
     {
-        $catalog = ! empty($data['catalog_id']) ? ActivityCatalog::find($data['catalog_id']) : null;
-        $quantity = (float) ($data['quantity'] ?? 1);
-        $complexity = $data['complexity'] ?? ($catalog->complexity ?? 'rendah');
-
-        return DB::transaction(function () use ($data, $actor, $catalog, $quantity, $complexity) {
+        return DB::transaction(function () use ($data, $actor) {
             $task = Task::create([
                 'code' => Task::generateCode(),
                 'team_id' => $data['team_id'] ?? $actor->teams()->value('teams.id'),
-                'catalog_id' => $catalog?->id,
                 'creator_id' => $actor->id,
                 'assignee_id' => $actor->id,
                 'title' => $data['title'],
@@ -121,9 +104,6 @@ class TaskService
                 'type' => 'mandiri',
                 'status' => 'pengajuan',
                 'priority' => $data['priority'] ?? 'sedang',
-                'complexity' => $complexity,
-                'quantity' => $quantity,
-                'points' => Task::computePoints($catalog, $quantity, $complexity),
                 'start_date' => $data['start_date'] ?? now()->toDateString(),
                 'due_date' => $data['due_date'] ?? null,
                 'submitted_at' => now(),
@@ -442,7 +422,7 @@ class TaskService
 
         if ($actor && $task->assignee_id !== $actor->id) {
             $task->assignee->notify(PantauNotification::forTask('approved', $task,
-                'Tugas disetujui · +'.rtrim(rtrim(number_format($task->points, 2, ',', '.'), '0'), ',').' poin', $task->title, $actor));
+                'Tugas disetujui & dinyatakan selesai', $task->title, $actor));
         }
 
         // Jika semua sub-tugas selesai, beri tahu pemegang tugas induk
@@ -520,6 +500,6 @@ class TaskService
 
         Notification::send($leaders, PantauNotification::forTask('cc', $task,
             'Tembusan: '.$actor->display_name.' memberi tugas ke '.$assignee->display_name,
-            $task->title.' · '.rtrim(rtrim(number_format($task->points, 2, ',', '.'), '0'), ',').' poin', $actor));
+            $task->title.($task->due_date ? ' · deadline '.$task->due_date->format('d/m/Y') : ''), $actor));
     }
 }

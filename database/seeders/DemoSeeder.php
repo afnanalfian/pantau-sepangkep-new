@@ -45,6 +45,8 @@ class DemoSeeder extends Seeder
         DB::transaction(function () {
             [$kepala, $kasubbag, $teams] = $this->people();
             $this->tasks($kepala, $kasubbag, $teams);
+            $this->bulanLalu($teams);
+            $this->presensi($kepala);
         });
     }
 
@@ -107,6 +109,9 @@ class DemoSeeder extends Seeder
             'start_date' => now()->startOfMonth()->addDays(2)->toDateString(), 'end_date' => now()->startOfMonth()->addDays(6)->toDateString(),
             'note' => 'Cuti tahunan', 'created_by' => $kepala->id,
         ]);
+
+        // Akun demo dianggap sudah ada sejak 2 bulan lalu (agar presensi & riwayat terhitung)
+        User::where('username', 'like', 'demo.%')->update(['created_at' => now()->subMonths(2)->startOfMonth()]);
 
         return [$kepala, $kasubbag, collect($teams)];
     }
@@ -210,6 +215,70 @@ class DemoSeeder extends Seeder
             $t = $this->make($kasubbag, $m, 'Penyiapan bahan rapat evaluasi anggaran', $this->cat('Tata Usaha'), 2, 'sedang', -3, 3);
             $this->progress($t, $m, mt_rand(1, 3));
         }
+    }
+
+    /* ================================================================ Bulan lalu (riwayat matriks) */
+
+    private function bulanLalu($teams): void
+    {
+        $prev = now()->subMonthNoOverflow()->startOfMonth();
+        foreach ($teams as $team) {
+            $leader = $team->members->firstWhere('pivot.role', 'ketua');
+            foreach ($team->members->where('pivot.role', 'anggota')->where('is_pimpinan', false) as $m) {
+                for ($k = 0; $k < 4; $k++) {
+                    $due = $prev->copy()->addDays(mt_rand(3, 26));
+                    $t = $this->svc->assign([
+                        'title' => ['Laporan bulanan', 'Rekap data lapangan', 'Pemeriksaan dokumen', 'Entri data'][$k].' '.bulan_tahun($prev),
+                        'priority' => 'sedang', 'start_date' => $due->copy()->subDays(7)->toDateString(), 'due_date' => $due->toDateString(),
+                    ], [$m->id], $leader)->first();
+                    $t->forceFill(['created_at' => $due->copy()->subDays(8)])->saveQuietly();
+                    if (mt_rand(0, 9) < 8) { // ±80% selesai tepat bulan
+                        $this->svc->start($t, $m);
+                        $this->files->addLink($t, 'https://drive.google.com/drive/folders/contoh-'.$t->id, 'Output '.$t->code, 'output', $m);
+                        $this->svc->submit($t->fresh(), $m);
+                        $this->svc->approve($t->fresh(), $t->fresh()->verifier ?? $leader);
+                        $done = $due->copy()->subDays(mt_rand(0, 2))->setTime(14, 0);
+                        $t->forceFill(['completed_at' => $done, 'submitted_at' => $done->copy()->subHours(3)])->saveQuietly();
+                    }
+                }
+            }
+        }
+    }
+
+    /* ================================================================ Presensi apel & rapat */
+
+    private function presensi(User $kepala): void
+    {
+        $pegawai = User::pegawai()->where('username', 'like', 'demo.%')->get();
+        $rapatNama = ['Rapat koordinasi bulanan', 'Rapat evaluasi kinerja tim', 'Rapat persiapan Susenas', 'Rapat pembahasan anggaran'];
+
+        foreach ([now()->subMonthNoOverflow()->startOfMonth(), now()->startOfMonth()] as $m) {
+            $end = $m->isSameMonth(now()) ? now()->copy() : $m->copy()->endOfMonth();
+            $events = [];
+            for ($d = $m->copy(); $d->lte($end); $d->addDay()) {
+                if ($d->isMonday()) {
+                    $events[] = ['apel', 'Apel pagi', $d->copy(), '07:30', 'Halaman kantor'];
+                }
+                if ($d->day === 17) {
+                    $events[] = ['apel', 'Apel Hari Kesadaran Nasional', $d->copy(), '07:30', 'Halaman kantor'];
+                }
+                if (in_array($d->day, [6, 14, 24]) && ! $d->isWeekend()) {
+                    $events[] = ['rapat', $rapatNama[$d->day % 4], $d->copy(), '09:00', 'Ruang rapat lt. 2'];
+                }
+            }
+            foreach ($events as [$jenis, $nama, $tgl, $jam, $tempat]) {
+                $k = \App\Models\PresensiKegiatan::create(['jenis' => $jenis, 'nama' => $nama, 'tanggal' => $tgl->toDateString(),
+                    'jam' => $jam, 'tempat' => $tempat, 'created_by' => $kepala->id]);
+                foreach ($pegawai as $p) {
+                    $rajin = in_array($p->username, ['demo.fajar', 'demo.yusuf']) ? 6 : 9; // beberapa pegawai sering absen
+                    $roll = mt_rand(0, 9);
+                    $status = $roll < $rajin ? 'hadir' : ($roll === 9 && mt_rand(0, 1) ? 'izin' : 'absen');
+                    \App\Models\PresensiKehadiran::create(['presensi_kegiatan_id' => $k->id, 'user_id' => $p->id, 'status' => $status, 'dicatat_oleh' => $kepala->id]);
+                }
+            }
+        }
+        // Satu pegawai demo ditunjuk sebagai petugas presensi
+        User::where('username', 'demo.sulfiani')->update(['is_petugas_presensi' => true]);
     }
 
     /* ================================================================ Helper */

@@ -37,6 +37,7 @@ class DemoData extends Command
             ['Ketua Tim Sosial', 'demo.ketua.sosial', DemoSeeder::PASSWORD],
             ['Anggota (beban tinggi)', 'demo.nanda', DemoSeeder::PASSWORD],
             ['Anggota (beban rendah)', 'demo.fajar', DemoSeeder::PASSWORD],
+            ['Petugas presensi', 'demo.sulfiani', DemoSeeder::PASSWORD],
             ['Anggota lain', 'demo.reza / demo.ratna / …', DemoSeeder::PASSWORD],
         ]);
         $this->info(Task::whereIn('assignee_id', User::where('username', 'like', 'demo.%')->select('id'))->count().' tugas demo dibuat.');
@@ -73,6 +74,7 @@ class DemoData extends Command
                 ->filter(fn ($n) => in_array(json_decode($n->data, true)['task_id'] ?? null, $taskIds->all()))
                 ->each(fn ($n) => DB::table('notifications')->where('id', $n->id)->delete());
 
+            DB::table('presensi_kegiatans')->whereIn('created_by', $ids)->delete();
             DB::table('sessions')->whereIn('user_id', $ids)->delete();
             User::withTrashed()->whereIn('id', $ids)->forceDelete();   // team_user, leaves, push ikut terhapus (cascade)
 

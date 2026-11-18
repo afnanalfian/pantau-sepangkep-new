@@ -19,7 +19,7 @@
                 <x-avatar :user="$t->assignee" />
                 <div class="min-w-0 flex-1">
                     <a href="{{ route('tasks.show', $t) }}" wire:navigate class="font-semibold hover:text-bps-blue-700">{{ $t->title }}</a>
-                    <p class="mt-0.5 text-sm text-navy-500">{{ $t->assignee->display_name }} · {{ $t->code }} · <b class="text-navy-900">{{ poin($t->points) }} poin</b>
+                    <p class="mt-0.5 text-sm text-navy-500">{{ $t->assignee->display_name }} · {{ $t->code }}{{ $t->due_date ? ' · deadline '.tgl($t->effectiveDueDate(), 'j M') : '' }}
                         @if ($tab !== 'perpanjangan') · {{ $t->attachments_count }} lampiran @endif</p>
                     @if ($tab === 'perpanjangan')
                         @php $ext = app(\App\Services\TaskService::class)->pendingExtension($t); @endphp

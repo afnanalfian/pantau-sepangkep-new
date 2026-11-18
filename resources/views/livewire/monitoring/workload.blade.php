@@ -1,14 +1,13 @@
-@php $u = auth()->user(); $dist = $this->distribution; $levels = \App\Services\WorkloadService::LEVELS; @endphp
+@php $u = auth()->user(); $dist = $this->distribution; $levels = \App\Services\KinerjaService::BEBAN; @endphp
 <div>
-    <x-page-header title="Beban kerja pegawai" subtitle="Beban = (poin terverifikasi + poin berjalan) ÷ target. Tugas terlambat tidak dihitung sampai diperpanjang.">
+    <x-page-header title="Beban kerja pegawai" subtitle="Jumlah tugas yang sedang dipegang tiap pegawai saat ini, dan penyelesaian tugas bulan terpilih.">
         <x-slot:actions>
-            <input type="month" wire:model.live="month" class="input w-auto py-2">
+            <input type="month" wire:model.live="month" class="input w-auto py-2" aria-label="Bulan">
         </x-slot:actions>
     </x-page-header>
 
-    {{-- Distribusi level --}}
     <div class="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        @foreach (['underloaded' => '< 50% target', 'normal' => '50–80%', 'optimal' => '80–110%', 'overloaded' => '> 110%'] as $k => $range)
+        @foreach (['kosong' => 'tidak ada tugas aktif', 'ringan' => '< '.\App\Support\Settings::get('beban_ringan', 2).' tugas aktif', 'normal' => \App\Support\Settings::get('beban_ringan', 2).'–'.\App\Support\Settings::get('beban_padat', 8).' tugas aktif', 'padat' => '> '.\App\Support\Settings::get('beban_padat', 8).' tugas aktif'] as $k => $range)
             <button wire:click="$set('level', '{{ $level === $k ? '' : $k }}')"
                     class="card flex items-center gap-3 p-4 text-left transition {{ $level === $k ? 'ring-2 ring-navy-900' : 'hover:border-navy-300' }}">
                 <span class="slant h-10 w-3 {{ $levels[$k]['class'] }}"></span>
@@ -23,8 +22,9 @@
             @foreach ($this->teams as $t)<option value="{{ $t->id }}">{{ $t->name }}</option>@endforeach
         </select>
         <select wire:model.live="sort" class="input w-auto py-2">
-            <option value="load_asc">Beban terendah dulu</option>
-            <option value="load_desc">Beban tertinggi dulu</option>
+            <option value="aktif_asc">Tugas aktif paling sedikit</option>
+            <option value="aktif_desc">Tugas aktif paling banyak</option>
+            <option value="pct_asc">Penyelesaian terendah</option>
             <option value="overdue">Terlambat terbanyak</option>
             <option value="name">Nama</option>
         </select>
@@ -43,23 +43,20 @@
                         <div class="min-w-0 flex-1">
                             <p class="truncate font-semibold">{{ $r['user']->display_name }}</p>
                             <p class="truncate text-xs text-navy-500">{{ $r['user']->jabatan ?: $r['user']->teams->pluck('name')->join(', ') }}</p>
-                            <div class="mt-1 flex items-center gap-2"><x-activity-dot :activity="$r['activity']" /><x-level :level="$r['level']" /></div>
+                            <div class="mt-1 flex items-center gap-2"><x-activity-dot :activity="$r['activity']" /><x-beban :beban="$r['beban']" /></div>
                         </div>
-                        <span class="text-2xl font-extrabold {{ $r['level'] === 'overloaded' ? 'text-rose-600' : ($r['level'] === 'underloaded' ? 'text-amber-600' : '') }}">{{ round($r['load_pct']) }}<span class="text-sm">%</span></span>
+                        <span class="text-right leading-none"><span class="text-3xl font-extrabold">{{ $r['aktif'] }}</span><span class="block text-[11px] text-navy-500">tugas aktif</span></span>
                     </div>
-                    <x-points-bar class="mt-4" :verified="$r['verified']" :committed="$r['committed']" :target="$r['target']" />
-                    <dl class="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
-                        <div class="rounded-lg bg-paper py-1.5"><dt class="text-navy-500">Terverifikasi</dt><dd class="font-bold">{{ poin($r['verified']) }}</dd></div>
-                        <div class="rounded-lg bg-paper py-1.5"><dt class="text-navy-500">Berjalan</dt><dd class="font-bold">{{ poin($r['committed']) }}</dd></div>
-                        <div class="rounded-lg bg-paper py-1.5"><dt class="text-navy-500">Target</dt><dd class="font-bold">{{ poin($r['target']) }}</dd></div>
-                    </dl>
-                    <div class="mt-3 flex items-center gap-2 text-xs text-navy-500">
-                        <span>{{ $r['active_count'] }} tugas aktif</span>
-                        @if ($r['overdue_count'])<span class="font-semibold text-rose-600">· {{ $r['overdue_count'] }} terlambat</span>@endif
-                        @if ($r['leave_days'])<span>· {{ $r['leave_days'] }} hr cuti/DL</span>@endif
+                    <div class="mt-4 flex items-center gap-3">
+                        <x-completion-bar class="flex-1" :selesai="$r['tugas_selesai']" :berjalan="$r['tugas_berjalan']" :gagal="$r['tugas_gagal']" />
+                        <x-pct :value="$r['tugas_pct']" />
                     </div>
+                    <p class="mt-2 text-xs text-navy-500">
+                        {{ $r['tugas_selesai'] }}/{{ $r['tugas_total'] }} tugas bulan ini selesai
+                        @if ($r['terlambat'])<span class="font-semibold text-rose-600"> · {{ $r['terlambat'] }} terlambat</span>@endif
+                    </p>
                     @if ($u->canAssign() && $r['user']->id !== $u->id)
-                        <button class="btn {{ in_array($r['level'], ['underloaded', 'normal']) ? 'btn-blue' : 'btn-ghost' }} btn-sm mt-4"
+                        <button class="btn {{ in_array($r['beban'], ['kosong', 'ringan']) ? 'btn-blue' : 'btn-ghost' }} btn-sm mt-4"
                                 @click="$dispatch('open-task-form', { mode: 'assign', assignee: {{ $r['user']->id }} })">
                             <x-icon name="plus" class="size-3.5" /> Beri tugas langsung
                         </button>
@@ -72,22 +69,19 @@
     @else
         <div class="card overflow-hidden">
             <div class="overflow-x-auto">
-                <table class="w-full min-w-[900px] text-sm">
+                <table class="w-full min-w-[820px] text-sm">
                     <thead class="table-head"><tr>
-                        <th class="px-5 py-3">Pegawai</th><th class="px-3 py-3">Status</th><th class="px-3 py-3 w-64">Capaian</th>
-                        <th class="px-3 py-3 text-right">Terverifikasi</th><th class="px-3 py-3 text-right">Berjalan</th><th class="px-3 py-3 text-right">Target</th>
-                        <th class="px-3 py-3 text-right">Beban</th><th class="px-3 py-3 text-right">Terlambat</th><th class="px-5 py-3"></th></tr></thead>
+                        <th class="px-5 py-3">Pegawai</th><th class="px-3 py-3">Status</th>
+                        <th class="px-3 py-3 text-right">Tugas aktif</th><th class="px-3 py-3 text-right">Terlambat</th>
+                        <th class="px-3 py-3 w-56">Penyelesaian bulan ini</th><th class="px-5 py-3"></th></tr></thead>
                     <tbody class="divide-y divide-line">
                         @foreach ($this->rows as $r)
                             <tr wire:key="wlt-{{ $r['user']->id }}">
                                 <td class="px-5 py-2.5"><span class="flex items-center gap-2"><x-avatar :user="$r['user']" size="xs" /><span class="truncate font-medium">{{ $r['user']->display_name }}</span></span></td>
-                                <td class="px-3 py-2.5"><div class="flex items-center gap-2"><x-activity-dot :activity="$r['activity']" /><x-level :level="$r['level']" /></div></td>
-                                <td class="px-3 py-2.5"><x-points-bar height="h-2" :verified="$r['verified']" :committed="$r['committed']" :target="$r['target']" /></td>
-                                <td class="px-3 py-2.5 text-right font-semibold">{{ poin($r['verified']) }}</td>
-                                <td class="px-3 py-2.5 text-right">{{ poin($r['committed']) }}</td>
-                                <td class="px-3 py-2.5 text-right">{{ poin($r['target']) }}</td>
-                                <td class="px-3 py-2.5 text-right font-bold">{{ round($r['load_pct']) }}%</td>
-                                <td class="px-3 py-2.5 text-right {{ $r['overdue_count'] ? 'font-semibold text-rose-600' : 'text-navy-300' }}">{{ $r['overdue_count'] }}</td>
+                                <td class="px-3 py-2.5"><div class="flex items-center gap-2"><x-activity-dot :activity="$r['activity']" /><x-beban :beban="$r['beban']" /></div></td>
+                                <td class="px-3 py-2.5 text-right font-bold">{{ $r['aktif'] }}</td>
+                                <td class="px-3 py-2.5 text-right {{ $r['terlambat'] ? 'font-semibold text-rose-600' : 'text-navy-300' }}">{{ $r['terlambat'] }}</td>
+                                <td class="px-3 py-2.5"><div class="flex items-center gap-2"><x-completion-bar class="flex-1" height="h-2" :selesai="$r['tugas_selesai']" :berjalan="$r['tugas_berjalan']" :gagal="$r['tugas_gagal']" /><x-pct :value="$r['tugas_pct']" /></div></td>
                                 <td class="px-5 py-2.5 text-right">@if ($u->canAssign())<button class="btn btn-ghost btn-sm" @click="$dispatch('open-task-form', { mode: 'assign', assignee: {{ $r['user']->id }} })">Beri tugas</button>@endif</td>
                             </tr>
                         @endforeach

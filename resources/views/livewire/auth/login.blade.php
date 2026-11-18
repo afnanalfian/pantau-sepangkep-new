@@ -10,7 +10,7 @@
         <div>
             <label for="username" class="label">Username</label>
             <input wire:model="username" id="username" type="text" autocomplete="username" autocapitalize="none" autofocus
-                   class="input @error('username') input-error @enderror" placeholder="mis. afnanalfian">
+                   class="input @error('username') input-error @enderror" placeholder="masukkan username ...">
             @error('username') <p class="error">{{ $message }}</p> @enderror
         </div>
         <div x-data="{ show: false }">

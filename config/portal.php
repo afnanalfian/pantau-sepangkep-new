@@ -8,15 +8,20 @@
 */
 
 return [
+    /*
+    | nama  = nama aplikasi/sistem (judul besar)
+    | label = bidang layanan (keterangan di bawahnya)
+    | logo  = file di public/images/portal/ — ganti file PNG-nya untuk memperbarui logo
+    */
     'layanan' => [
-        ['key' => 'wbk', 'label' => 'WBK', 'desc' => 'Zona Integritas menuju Wilayah Bebas dari Korupsi', 'url' => 'https://sites.google.com/view/si-emozi', 'icon' => 'flag', 'tone' => 'navy'],
-        ['key' => 'persuratan', 'label' => 'Persuratan', 'desc' => 'SICATUR · pencatatan & penomoran surat', 'route' => 'portal.sicatur', 'icon' => 'mail', 'tone' => 'blue'],
-        ['key' => 'keuangan', 'label' => 'Keuangan', 'desc' => 'SIKU · arsip SPJ, revisi anggaran, permindok', 'route' => 'portal.siku', 'icon' => 'chart', 'tone' => 'green'],
-        ['key' => 'pekppp', 'label' => 'PEKPPP', 'desc' => 'Pemantauan & evaluasi kinerja penyelenggaraan pelayanan publik', 'url' => 'https://sites.google.com/view/pekppp-hub/beranda', 'icon' => 'check-circle', 'tone' => 'orange'],
-        ['key' => 'mitra', 'label' => 'Mitra', 'desc' => 'SIBEBAN · monitoring honor & beban tugas mitra', 'route' => 'sibeban.monitoring', 'icon' => 'users', 'tone' => 'blue'],
-        ['key' => 'antrian', 'label' => 'Antrian PST', 'desc' => 'Antrean Pelayanan Statistik Terpadu', 'url' => 'https://script.google.com/macros/s/AKfycbzoD1zwe4GgfK08eZT53pmcnSLZvspWwiTrDIqn6N8-aIeDkr1ENX72B1ITxlJG12f7/exec', 'icon' => 'inbox', 'tone' => 'green'],
-        ['key' => 'sibolu', 'label' => 'SIBOLU', 'desc' => 'Layanan konsultasi via WhatsApp', 'url' => 'https://api.whatsapp.com/send/?phone=6281908110739', 'icon' => 'chat', 'tone' => 'orange'],
-        ['key' => 'pantau', 'label' => 'PANTAU', 'desc' => 'Penugasan, beban kerja & kinerja pegawai', 'route' => 'dashboard', 'icon' => 'gauge', 'tone' => 'navy'],
+        ['key' => 'wbk', 'nama' => 'SI-EMOZI', 'label' => 'WBK', 'desc' => 'Zona Integritas menuju Wilayah Bebas dari Korupsi', 'logo' => 'si-emozi.png', 'url' => 'https://sites.google.com/view/si-emozi', 'tone' => 'navy'],
+        ['key' => 'persuratan', 'nama' => 'SI-CATUR', 'label' => 'Persuratan', 'desc' => 'Pencatatan & penomoran surat masuk dan keluar', 'logo' => 'si-catur.png', 'route' => 'portal.sicatur', 'tone' => 'orange'],
+        ['key' => 'keuangan', 'nama' => 'SI-KU', 'label' => 'Keuangan', 'desc' => 'Arsip SPJ, revisi anggaran, permindok', 'logo' => 'si-ku.png', 'route' => 'portal.siku', 'tone' => 'green'],
+        ['key' => 'pekppp', 'nama' => 'SIGAP', 'label' => 'PEKPPP', 'desc' => 'Pemantauan & evaluasi kinerja pelayanan publik', 'logo' => 'sigap.png', 'url' => 'https://sites.google.com/view/pekppp-hub/beranda', 'tone' => 'blue'],
+        ['key' => 'mitra', 'nama' => 'SIBEBAN', 'label' => 'Mitra', 'desc' => 'Monitoring honor & beban tugas mitra', 'logo' => 'sibeban.png', 'route' => 'sibeban.monitoring', 'tone' => 'blue'],
+        ['key' => 'antrian', 'nama' => 'SIPANTAS', 'label' => 'Antrian PST', 'desc' => 'Antrean Pelayanan Statistik Terpadu', 'logo' => 'sipantas.png', 'url' => 'https://script.google.com/macros/s/AKfycbzoD1zwe4GgfK08eZT53pmcnSLZvspWwiTrDIqn6N8-aIeDkr1ENX72B1ITxlJG12f7/exec', 'tone' => 'orange'],
+        ['key' => 'sibolu', 'nama' => 'SIBOLU', 'label' => 'Konsultasi', 'desc' => 'Layanan konsultasi via WhatsApp', 'logo' => 'sibolu.png', 'url' => 'https://api.whatsapp.com/send/?phone=6281908110739', 'tone' => 'green'],
+        ['key' => 'pantau', 'nama' => 'PANTAU SEPANGKEP', 'label' => 'Pantau', 'desc' => 'Penugasan, beban kerja & kinerja pegawai', 'logo' => 'pantau.png', 'route' => 'dashboard', 'tone' => 'navy'],
     ],
 
     'sicatur' => [

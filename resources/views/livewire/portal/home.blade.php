@@ -1,10 +1,5 @@
 @php
-    $tone = [
-        'blue' => ['bg-bps-blue-50 text-bps-blue-700', 'group-hover:bg-bps-blue', 'bg-bps-blue'],
-        'green' => ['bg-bps-green-50 text-bps-green-700', 'group-hover:bg-bps-green', 'bg-bps-green'],
-        'orange' => ['bg-bps-orange-50 text-bps-orange-700', 'group-hover:bg-bps-orange', 'bg-bps-orange'],
-        'navy' => ['bg-navy-50 text-navy-700', 'group-hover:bg-navy-800', 'bg-navy-800'],
-    ];
+    $tone = ['blue' => 'bg-bps-blue', 'green' => 'bg-bps-green', 'orange' => 'bg-bps-orange', 'navy' => 'bg-navy-800'];
 @endphp
 <div>
     <div class="mb-6 max-w-2xl">
@@ -15,21 +10,23 @@
     <div class="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         @foreach ($layanan as $l)
             @php
-                $t = $tone[$l['tone']];
                 $external = isset($l['url']);
                 $href = $external ? $l['url'] : route($l['route']);
             @endphp
             <a href="{{ $href }}" @if ($external) target="_blank" rel="noopener" @else wire:navigate @endif
-               class="group card relative flex flex-col overflow-hidden p-4 transition hover:-translate-y-0.5 hover:border-navy-300 hover:shadow-lg hover:shadow-navy-900/5 sm:p-5">
-                <span class="absolute inset-x-0 top-0 h-1 {{ $t[2] }}"></span>
-                <span class="grid size-12 place-items-center rounded-2xl transition {{ $t[0] }} {{ $t[1] }} group-hover:text-white">
-                    <x-icon :name="$l['icon']" class="size-6" />
+               title="{{ $l['desc'] }}"
+               class="group card relative flex flex-col items-center overflow-hidden px-3 pt-5 pb-4 text-center transition hover:-translate-y-0.5 hover:border-navy-300 hover:shadow-lg hover:shadow-navy-900/5 sm:px-5 sm:pt-7 sm:pb-5">
+                <span class="absolute inset-x-0 bottom-0 h-1 origin-left scale-x-0 transition-transform duration-300 group-hover:scale-x-100 {{ $tone[$l['tone']] ?? 'bg-bps-blue' }}"></span>
+                @if ($external)
+                    <x-icon name="external" class="absolute top-3 right-3 size-3.5 text-navy-300" />
+                @endif
+                <span class="grid size-20 place-items-center sm:size-28">
+                    <img src="{{ asset('images/portal/'.$l['logo']) }}" alt="Logo {{ $l['nama'] }}" loading="lazy"
+                         class="max-h-full max-w-full object-contain transition duration-300 group-hover:scale-105">
                 </span>
-                <span class="mt-4 flex items-center gap-1.5 text-base font-extrabold tracking-tight">
-                    {{ $l['label'] }}
-                    @if ($external)<x-icon name="external" class="size-3.5 text-navy-300" />@endif
-                </span>
-                <span class="mt-1 text-xs leading-relaxed text-navy-500 sm:text-sm">{{ $l['desc'] }}</span>
+                <span class="mt-3 text-base leading-tight font-extrabold tracking-tight text-navy-900 sm:mt-4 sm:text-xl">{{ $l['nama'] }}</span>
+                <span class="mt-1 text-[11px] font-semibold tracking-[0.14em] text-navy-500 uppercase sm:text-xs">{{ $l['label'] }}</span>
+                <span class="mt-2 hidden text-xs leading-relaxed text-navy-400 sm:block">{{ $l['desc'] }}</span>
             </a>
         @endforeach
     </div>
@@ -68,7 +65,7 @@
                     </div>
                 </article>
             @empty
-                <div class="card col-span-full"><x-empty icon="sparkles" title="Belum ada data inovator" text="{{ auth()->user()->is_admin ? 'Tambahkan foto & nama pegawai pembuat inovasi.' : 'Admin akan segera menambahkan.' }}" /></div>
+                <div class="card col-span-full"><x-empty icon="sparkles" title="Belum ada data inovator" :text="auth()->user()->is_admin ? 'Tambahkan foto dan nama pegawai pembuat inovasi.' : 'Admin akan segera menambahkan.'" /></div>
             @endforelse
         </div>
     </section>

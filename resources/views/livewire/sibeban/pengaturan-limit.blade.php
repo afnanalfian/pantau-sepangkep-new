@@ -1,54 +1,26 @@
-<div class="max-w-3xl">
+@php use App\Support\Sibeban\Format; @endphp
+<div>
     @include('livewire.sibeban.partials.nav')
     @include('livewire.sibeban.partials.flash')
 
-    <h1 class="text-xl font-semibold text-slate-900">Pengaturan Limit Honor</h1>
-    <p class="mb-5 text-sm text-slate-500">Batas honor mitra per bulan (nonorganik) menurut jenis kegiatan dan jabatan. Nilai awal mengikuti sheet LIMIT pada matriks honor (Perka BPS No. 115/2024 jo. 165/2024).</p>
+    <div class="max-w-2xl">
+        <x-page-header title="Limit honor bulanan" subtitle="Batas total honor seorang mitra dalam satu bulan, dari semua kegiatan. Mitra dengan total di bawah limit masih bisa dipakai." />
 
-    <form wire:submit="simpan" class="space-y-5">
-        <div class="overflow-hidden rounded-xl bg-white ring-1 ring-slate-200">
-            <table class="min-w-full text-sm">
-                <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-                    <tr>
-                        <th class="px-4 py-2 text-left font-medium">Jenis kegiatan</th>
-                        <th class="px-4 py-2 text-left font-medium">PPL (pendataan lapangan)</th>
-                        <th class="px-4 py-2 text-left font-medium">PML (pemeriksaan lapangan)</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-line">
-                    @foreach ($limit as $jenis => $per)
-                        <tr wire:key="l-{{ $jenis }}">
-                            <td class="px-4 py-3 font-medium">{{ $jenis }}</td>
-                            @foreach (['ppl', 'pml'] as $jab)
-                                <td class="px-4 py-3">
-                                    <div class="flex items-center gap-1">
-                                        <span class="text-slate-400">Rp</span>
-                                        <input type="number" min="1" step="1000" wire:model="limit.{{ $jenis }}.{{ $jab }}" class="w-40 rounded-lg px-3 py-1.5 tabular ring-1 ring-slate-300">
-                                    </div>
-                                    @error("limit.$jenis.$jab")<span class="text-xs text-red-600">{{ $message }}</span>@enderror
-                                </td>
-                            @endforeach
-                        </tr>
-                    @endforeach
-                </tbody>
-            </table>
-        </div>
-
-        <div class="grid gap-4 rounded-xl bg-white p-5 text-sm ring-1 ring-slate-200 sm:grid-cols-2">
-            <label>
-                <span class="text-slate-600">Ambang warna oranye (% dari limit)</span>
-                <input type="number" min="1" max="100" step="1" wire:model="ambangOranye" class="mt-1 w-32 rounded-lg px-3 py-1.5 tabular ring-1 ring-slate-300">
-                <span class="block text-xs text-slate-400">≤ ambang = hijau, ambang–100% = oranye, &gt; 100% = merah.</span>
-                @error('ambangOranye')<span class="text-xs text-red-600">{{ $message }}</span>@enderror
-            </label>
-            <label>
-                <span class="text-slate-600">Limit cadangan (Rp)</span>
-                <input type="number" min="1" step="1000" wire:model="limitDefault" class="mt-1 w-40 rounded-lg px-3 py-1.5 tabular ring-1 ring-slate-300">
-                <span class="block text-xs text-slate-400">Dipakai bila jenis/jabatan tidak ada di tabel.</span>
-                @error('limitDefault')<span class="text-xs text-red-600">{{ $message }}</span>@enderror
-            </label>
-        </div>
-
-        <button type="submit" class="rounded-lg bg-bps-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-bps-blue-700">Simpan pengaturan</button>
-    </form>
+        <form wire:submit="simpan" class="card space-y-5 p-5">
+            <div>
+                <label class="label">Limit honor per mitra per bulan</label>
+                <div class="relative max-w-xs"><span class="pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2 text-sm text-navy-400">Rp</span>
+                    <input type="number" min="1" step="1" wire:model.live.debounce.500ms="limitBulanan" class="input !pl-10 text-lg font-bold tabular-nums"></div>
+                <p class="hint">Tertulis: <b>{{ Format::rp((int) $limitBulanan) }}</b> per bulan.</p>
+                @error('limitBulanan')<p class="error">{{ $message }}</p>@enderror
+            </div>
+            <div>
+                <label class="label">Tandai “mendekati limit” mulai</label>
+                <div class="flex items-center gap-2"><input type="number" min="1" max="100" step="1" wire:model.live.debounce.500ms="ambangOranye" class="input !w-24 tabular-nums"><span class="text-sm text-navy-500">% dari limit</span></div>
+                <p class="hint">Saat ini: honor di atas {{ Format::rp((int) round((int) $limitBulanan * (float) $ambangOranye / 100)) }} ditandai oranye.</p>
+                @error('ambangOranye')<p class="error">{{ $message }}</p>@enderror
+            </div>
+            <div class="flex justify-end border-t border-line pt-4"><button class="btn btn-blue" wire:loading.attr="disabled">Simpan</button></div>
+        </form>
+    </div>
 </div>

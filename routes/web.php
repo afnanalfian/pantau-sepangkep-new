@@ -63,6 +63,8 @@ Route::middleware(['auth', 'account'])->group(function () {
         Route::get('/sicatur', Livewire\Portal\Sicatur::class)->name('sicatur');
         Route::get('/sicatur/lampiran/{surat}', [SuratController::class, 'file'])->name('sicatur.file');
         Route::get('/sicatur/export', [SuratController::class, 'export'])->name('sicatur.export');
+        Route::get('/sicatur/pedoman', [SuratController::class, 'pedoman'])->name('sicatur.pedoman');
+        Route::get('/sicatur/template-riwayat', [SuratController::class, 'template'])->name('sicatur.template')->middleware('role:admin');
         Route::get('/siku', Livewire\Portal\Siku::class)->name('siku');
         Route::get('/kepegawaian', Livewire\Portal\Kepegawaian::class)->name('kepegawaian');
     });
@@ -70,11 +72,13 @@ Route::middleware(['auth', 'account'])->group(function () {
     // SIBEBAN – monitoring honor mitra (bagian Portal Inovasi)
     Route::prefix('portal/sibeban')->name('sibeban.')->group(function () {
         Route::get('/', Livewire\Sibeban\Monitoring::class)->name('monitoring');
+        Route::get('/ketersediaan.xlsx', [SibebanTemplate::class, 'monitoring'])->name('monitoring.excel');
         Route::get('/kegiatan', Livewire\Sibeban\Kegiatan\Index::class)->name('kegiatan.index');
         Route::get('/kegiatan/{kegiatan}', Livewire\Sibeban\Kegiatan\Show::class)->name('kegiatan.show');
         Route::get('/kegiatan/{kegiatan}/template', [SibebanTemplate::class, 'penugasan'])->name('kegiatan.template');
         Route::get('/mitra', Livewire\Sibeban\Mitra\Index::class)->name('mitra.index');
-        Route::get('/mitra/template', [SibebanTemplate::class, 'mitra'])->name('mitra.template');
+        Route::get('/mitra/template', [SibebanTemplate::class, 'mitra'])->name('mitra.template')->middleware('role:admin');
+        Route::get('/mitra/ekspor', [SibebanTemplate::class, 'ekspor'])->name('mitra.ekspor')->middleware('role:admin');
         Route::get('/mitra/{mitra}', Livewire\Sibeban\Mitra\Show::class)->name('mitra.show');
         Route::get('/pengaturan', Livewire\Sibeban\PengaturanLimit::class)->name('pengaturan')->middleware('role:admin');
     });

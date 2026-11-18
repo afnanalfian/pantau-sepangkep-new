@@ -19,9 +19,7 @@ class Settings
         // Peta beban kerja (jumlah tugas aktif)
         'beban_ringan' => 2,
         'beban_padat' => 8,
-        // SICATUR
-        'format_surat_keluar' => '{sifat}-{nomor}/73090/{klasifikasi}/{tahun}',
-        'format_surat_masuk' => 'SM-{nomor}/{tahun}',
+        // SICATUR: format nomor per jenis disimpan sebagai sicatur_format_<kode> (bawaan di config/sicatur.php)
         'sla_hours' => 48,                 // batas review ketua tim (jam)
         'sla_action' => 'escalate',        // escalate | auto_approve
         'reminder_hours' => 24,            // pengingat H-1 deadline

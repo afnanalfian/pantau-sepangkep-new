@@ -27,9 +27,6 @@
                 </fieldset>
                 <div><label class="label">Beban "ringan" bila tugas aktif kurang dari</label><input wire:model="s.beban_ringan" type="number" class="input"></div>
                 <div><label class="label">Beban "padat" bila tugas aktif lebih dari</label><input wire:model="s.beban_padat" type="number" class="input">@error('s.beban_padat')<p class="error">{{ $message }}</p>@enderror</div>
-                <div><label class="label">Format nomor surat keluar (SICATUR)</label><input wire:model="s.format_surat_keluar" class="input font-mono text-xs"></div>
-                <div><label class="label">Format nomor agenda surat masuk</label><input wire:model="s.format_surat_masuk" class="input font-mono text-xs"></div>
-                <p class="hint -mt-2 sm:col-span-2">Kode yang tersedia: <code>{sifat}</code> <code>{nomor}</code> <code>{klasifikasi}</code> <code>{bulan}</code> <code>{bulan_romawi}</code> <code>{tahun}</code></p>
                 <div class="sm:col-span-2"><label class="label">Nama kantor</label><input wire:model="s.office_name" class="input"></div>
                 <div><label class="label">Pimpinan utama (penerima eskalasi)</label>
                     <select wire:model="s.primary_pimpinan_id" class="input"><option value="">Otomatis</option>@foreach ($pimpinans as $p)<option value="{{ $p->id }}">{{ $p->display_name }}</option>@endforeach</select>

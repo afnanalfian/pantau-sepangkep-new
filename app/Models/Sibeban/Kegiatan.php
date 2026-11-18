@@ -14,7 +14,7 @@ class Kegiatan extends Model
 
     protected $fillable = [
         'nama', 'tim', 'jenis', 'tanggal_mulai', 'tanggal_selesai',
-        'honor_ppl', 'honor_pml', 'keterangan', 'sumber',
+        'honor_ppl', 'honor_pml', 'keterangan', 'sumber', 'user_id', 'pembuat',
     ];
 
     protected $casts = [
@@ -35,8 +35,16 @@ class Kegiatan extends Model
         return Periode::bulanAntara($this->tanggal_mulai, $this->tanggal_selesai);
     }
 
-    public function honorDefault(string $jabatan): int
+    /** Admin atau pembuat kegiatan boleh memilih petugas & mengimpor honor. */
+    public function bisaDiubah(?\App\Models\User $u = null): bool
     {
-        return $jabatan === 'pml' ? (int) $this->honor_pml : (int) $this->honor_ppl;
+        $u ??= auth()->user();
+
+        return $u && ($u->is_admin || ($this->user_id && $this->user_id === $u->id));
+    }
+
+    public function user(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(\App\Models\User::class)->withTrashed();
     }
 }

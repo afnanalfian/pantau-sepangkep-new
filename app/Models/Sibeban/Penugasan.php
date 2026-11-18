@@ -10,8 +10,6 @@ class Penugasan extends Model
 {
     protected $table = 'sibeban_penugasans';
 
-    public const JABATAN = ['ppl' => 'PPL', 'pml' => 'PML'];
-
     protected $fillable = ['kegiatan_id', 'mitra_id', 'jabatan'];
 
     public function kegiatan(): BelongsTo

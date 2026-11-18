@@ -2,52 +2,36 @@
 
 namespace App\Livewire\Sibeban;
 
-use App\Models\Sibeban\Kegiatan;
-use App\Models\Sibeban\LimitHonor;
 use App\Models\Sibeban\Pengaturan;
+use App\Services\Sibeban\HonorService;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 
 #[Layout('layouts.portal')]
-#[Title('Pengaturan Limit')]
+#[Title('SIBEBAN · Limit Honor')]
 class PengaturanLimit extends Component
 {
-    /** ['Survei' => ['ppl' => 3910000, 'pml' => 3910000], ...] */
-    public array $limit = [];
+    public $limitBulanan = 3910000;
 
     public $ambangOranye = 75;
 
-    public $limitDefault = 3910000;
-
     public function mount(): void
     {
-        foreach (Kegiatan::JENIS as $j) {
-            foreach (['ppl', 'pml'] as $jab) {
-                $this->limit[$j][$jab] = (int) (LimitHonor::where('jenis', $j)->where('jabatan', $jab)->value('limit') ?? 0);
-            }
-        }
+        $this->limitBulanan = app(HonorService::class)->limit();
         $this->ambangOranye = (float) Pengaturan::nilai('ambang_oranye', '75');
-        $this->limitDefault = (int) Pengaturan::nilai('limit_default', '3910000');
     }
 
     public function simpan(): void
     {
         $this->validate([
-            'limit.*.*' => 'required|integer|min:1',
+            'limitBulanan' => 'required|integer|min:1',
             'ambangOranye' => 'required|numeric|min:1|max:100',
-            'limitDefault' => 'required|integer|min:1',
-        ], [], ['limit.*.*' => 'limit', 'ambangOranye' => 'ambang oranye', 'limitDefault' => 'limit default']);
+        ], [], ['limitBulanan' => 'limit honor bulanan', 'ambangOranye' => 'batas "mendekati limit"']);
 
-        foreach ($this->limit as $jenis => $per) {
-            foreach ($per as $jabatan => $nilai) {
-                LimitHonor::updateOrCreate(['jenis' => $jenis, 'jabatan' => $jabatan], ['limit' => (int) $nilai]);
-            }
-        }
+        Pengaturan::setNilai('limit_bulanan', (string) (int) $this->limitBulanan);
         Pengaturan::setNilai('ambang_oranye', (string) $this->ambangOranye);
-        Pengaturan::setNilai('limit_default', (string) (int) $this->limitDefault);
-
-        session()->flash('sukses', 'Pengaturan disimpan. Status seluruh mitra dihitung ulang otomatis.');
+        session()->flash('sukses', 'Pengaturan disimpan. Status semua mitra langsung dihitung ulang.');
     }
 
     public function render()

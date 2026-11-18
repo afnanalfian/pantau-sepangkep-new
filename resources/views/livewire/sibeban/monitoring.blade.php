@@ -1,116 +1,146 @@
 @php
     use App\Services\Sibeban\HonorService;
     use App\Support\Sibeban\Format;
-    use App\Support\Sibeban\Periode;
+    $kartu = [
+        'semua' => ['Semua mitra', 'users', 'text-navy-900', 'bg-navy-50'],
+        'tersedia' => ['Masih bisa dipakai', 'check-circle', 'text-bps-green-700', 'bg-bps-green-50'],
+        'mendekati' => ['Mendekati limit', 'alert', 'text-bps-orange-700', 'bg-bps-orange-50'],
+        'penuh' => ['Sudah penuh', 'lock', 'text-rose-700', 'bg-rose-50'],
+    ];
 @endphp
 <div>
     @include('livewire.sibeban.partials.nav')
-    <div class="flex flex-wrap items-end justify-between gap-4 mb-5">
+
+    <div class="mb-5 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
-            <h1 class="text-xl font-semibold text-slate-900">Monitoring Honor Mitra {{ $tahun }}</h1>
-            <p class="text-sm text-slate-500">Total honor tiap mitra per bulan dibandingkan limit SBKS. Klik nama untuk melihat rincian &amp; melepas dari kegiatan.</p>
+            <h1 class="text-xl font-extrabold tracking-tight sm:text-2xl">Mitra yang masih bisa dipakai</h1>
+            <p class="mt-1 text-sm text-navy-500">Honor seluruh kegiatan di bulan terpilih dibandingkan limit honor bulanan <b class="text-navy-900">{{ Format::rp($limit) }}</b> per mitra.</p>
         </div>
-        @include('livewire.sibeban.partials.legenda')
+        <div class="flex items-center gap-1.5">
+            <button wire:click="geserBulan(-1)" class="btn btn-ghost btn-sm !px-2" aria-label="Bulan sebelumnya"><x-icon name="chevron-left" class="size-4" /></button>
+            <input type="month" wire:model.live="bulan" class="input !w-44 !py-1.5 text-center font-semibold">
+            <button wire:click="geserBulan(1)" class="btn btn-ghost btn-sm !px-2" aria-label="Bulan berikutnya"><x-icon name="chevron-right" class="size-4" /></button>
+            <a href="{{ route('sibeban.monitoring.excel', ['bulan' => $bulan] + array_filter($filter)) }}" class="btn btn-ghost btn-sm ml-1"><x-icon name="download" class="size-4" /> Excel</a>
+        </div>
     </div>
 
-    {{-- Kartu ringkasan (klik untuk filter) --}}
-    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
-        @foreach (['merah' => 'Melebihi limit', 'oranye' => 'Mendekati limit', 'hijau' => 'Aman', 'kosong' => 'Belum ada honor'] as $s => $label)
-            <button wire:click="filterStatus('{{ $s }}')"
-                class="text-left rounded-xl bg-white p-4 ring-1 transition {{ $status === $s ? 'ring-2 ring-bps-blue-600' : 'ring-slate-200 hover:ring-slate-300' }}">
-                <div class="flex items-center gap-2 text-sm text-slate-500">
-                    <span class="h-2.5 w-2.5 rounded-full {{ HonorService::titik($s) }}"></span>{{ $label }}
-                </div>
-                <div class="mt-1 text-2xl font-semibold tabular text-slate-900">{{ Format::angka($ringkas[$s]) }}</div>
-                <div class="text-xs text-slate-400">mitra · {{ $bulan ? Periode::label($bulan, false) : 'kondisi terburuk setahun' }}</div>
+    <div class="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        @foreach ($kartu as $k => [$label, $icon, $warna, $bg])
+            <button wire:click="setKetersediaan('{{ $k }}')"
+                    class="card flex items-center gap-3 p-3.5 text-left transition hover:border-navy-300 sm:p-4 {{ $ketersediaan === $k ? '!border-navy-900 ring-2 ring-navy-900/10' : '' }}">
+                <span class="grid size-10 shrink-0 place-items-center rounded-xl {{ $bg }} {{ $warna }}"><x-icon :name="$icon" class="size-5" /></span>
+                <span class="min-w-0">
+                    <span class="block text-2xl font-extrabold leading-none tabular-nums {{ $warna }}">{{ Format::angka($ringkas[$k]) }}</span>
+                    <span class="mt-1 block truncate text-xs font-medium text-navy-500">{{ $label }}</span>
+                </span>
             </button>
         @endforeach
     </div>
 
-    {{-- Filter --}}
-    <div class="flex flex-wrap items-center gap-2 mb-3">
-        <input type="search" wire:model.live.debounce.400ms="cari" placeholder="Cari nama / ID SOBAT…"
-               class="w-64 rounded-lg border-slate-300 bg-white px-3 py-2 text-sm ring-1 ring-slate-200 focus:ring-bps-blue">
-        <select wire:model.live="tahun" class="rounded-lg bg-white px-3 py-2 text-sm ring-1 ring-slate-200">
-            @foreach ($daftarTahun as $t)
-                <option value="{{ $t }}">{{ $t }}</option>
-            @endforeach
+    <div class="card mb-4 grid grid-cols-2 gap-2 p-3 sm:grid-cols-3 lg:grid-cols-6">
+        <div class="relative col-span-2">
+            <x-icon name="search" class="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-navy-300" />
+            <input type="search" wire:model.live.debounce.400ms="cari" placeholder="Cari nama / Sobat ID…" class="input !pl-9">
+        </div>
+        <select wire:model.live="kecamatan" class="input">
+            <option value="">Semua kecamatan</option>
+            @foreach ($opsi['kecamatan'] as $k)<option value="{{ $k }}">{{ $k }}</option>@endforeach
         </select>
-        <select wire:model.live="bulan" class="rounded-lg bg-white px-3 py-2 text-sm ring-1 ring-slate-200">
-            <option value="">Status: terburuk setahun</option>
-            @foreach ($bulans as $b)
-                <option value="{{ $b }}">Status bulan {{ Periode::label($b, false) }}</option>
-            @endforeach
+        <select wire:model.live="desa" class="input" @disabled($kecamatan === '')>
+            <option value="">{{ $kecamatan === '' ? 'Pilih kecamatan dulu' : 'Semua desa/kelurahan' }}</option>
+            @foreach ($opsi['desa'] as $d)<option value="{{ $d }}">{{ $d }}</option>@endforeach
         </select>
-        <select wire:model.live="posisi" class="rounded-lg bg-white px-3 py-2 text-sm ring-1 ring-slate-200">
+        <select wire:model.live="posisi" class="input">
             <option value="">Semua posisi</option>
-            @foreach ($daftarPosisi as $p)
-                <option value="{{ $p }}">{{ $p }}</option>
-            @endforeach
+            @foreach ($opsi['posisi'] as $p)<option value="{{ $p }}">{{ $p }}</option>@endforeach
         </select>
-        <select wire:model.live="urut" class="rounded-lg bg-white px-3 py-2 text-sm ring-1 ring-slate-200">
-            <option value="persen">Urut: % limit tertinggi</option>
-            <option value="sisa">Urut: paling longgar</option>
-            <option value="total">Urut: total honor setahun</option>
+        <select wire:model.live="urut" class="input">
+            <option value="sisa">Urut: sisa limit terbesar</option>
+            <option value="honor">Urut: honor terbesar</option>
             <option value="nama">Urut: nama</option>
+            <option value="wilayah">Urut: wilayah</option>
         </select>
-        @if ($status)
-            <button wire:click="filterStatus('{{ $status }}')" class="text-sm text-bps-blue-700 hover:underline">Hapus filter status ×</button>
-        @endif
-        <div wire:loading class="text-sm text-slate-400">Memuat…</div>
     </div>
 
-    {{-- Matriks --}}
-    <div class="overflow-x-auto rounded-xl bg-white ring-1 ring-slate-200">
-        <table class="min-w-full text-sm">
-            <thead class="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+    <p class="mb-2 text-sm text-navy-500">
+        {{ Format::angka($total) }} mitra · {{ $kartu[$ketersediaan][0] }} · {{ $labelBulan }}
+    </p>
+
+    <div class="card overflow-hidden">
+        {{-- Desktop --}}
+        <table class="hidden w-full text-sm md:table">
+            <thead class="table-head">
                 <tr>
-                    <th class="sticky left-0 z-10 bg-slate-50 px-3 py-2 text-left font-medium">Mitra</th>
-                    @foreach ($bulans as $b)
-                        <th class="px-1.5 py-2 text-center font-medium {{ $bulan === $b ? 'text-bps-blue-700' : '' }}">{{ substr(Periode::label($b), 0, 3) }}</th>
-                    @endforeach
-                    <th class="px-3 py-2 text-right font-medium">Total setahun</th>
-                    <th class="px-3 py-2 text-left font-medium">Status</th>
+                    <th class="px-4 py-2.5">Mitra</th>
+                    <th class="px-4 py-2.5">Wilayah</th>
+                    <th class="px-4 py-2.5 text-right">Honor {{ $labelBulan }}</th>
+                    <th class="px-4 py-2.5 text-right">Sisa limit</th>
+                    <th class="w-44 px-4 py-2.5">Pemakaian</th>
                 </tr>
             </thead>
             <tbody class="divide-y divide-line">
-                @forelse ($baris as $r)
-                    <tr wire:key="m-{{ $r['mitra']->id }}" class="hover:bg-slate-50/60">
-                        <td class="sticky left-0 z-10 bg-white px-3 py-2 min-w-[220px]">
-                            <a href="{{ route('sibeban.mitra.show', $r['mitra']) }}" wire:navigate class="font-medium text-slate-900 hover:text-bps-blue-700">{{ $r['mitra']->nama }}</a>
-                            <div class="text-xs text-slate-400 tabular">{{ $r['mitra']->sobat_id }}@if ($r['mitra']->posisi) · {{ $r['mitra']->posisi }}@endif</div>
+                @forelse ($baris as $b)
+                    @php $m = $b['mitra']; @endphp
+                    <tr wire:key="m-{{ $m->id }}" class="hover:bg-navy-50/40">
+                        <td class="px-4 py-3">
+                            <a href="{{ route('sibeban.mitra.show', ['mitra' => $m, 'tahun' => substr($bulan, 0, 4)]) }}" wire:navigate class="font-semibold text-navy-900 hover:text-bps-blue-700">{{ $m->nama }}</a>
+                            <div class="text-xs text-navy-500">{{ $m->sobat_id }}{{ $m->posisi ? ' · '.$m->posisi : '' }}</div>
                         </td>
-                        @foreach ($bulans as $b)
-                            @php $c = $r['sel'][$b]; @endphp
-                            <td class="px-1 py-1.5">
-                                <div title="{{ Periode::label($b, false) }}&#10;Total {{ Format::rp($c['total']) }} dari limit {{ Format::rp($c['limit']) }} ({{ Format::persen($c['persen']) }})&#10;{{ implode(', ', $c['kegiatan']) }}"
-                                     class="rounded-md px-1.5 py-1 text-center text-[11px] leading-tight tabular ring-1 ring-inset {{ HonorService::warna($c['status']) }} {{ $bulan === $b ? 'outline outline-2 outline-bps-blue' : '' }}">
-                                    {{ Format::jt($c['total']) }}
-                                    @if ($c['total'] > 0)
-                                        <div class="opacity-70">{{ round($c['persen']) }}%</div>
-                                    @endif
+                        <td class="px-4 py-3 text-xs text-navy-700">
+                            <div>{{ $m->desa ?: '–' }}</div>
+                            <div class="text-navy-500">{{ $m->kecamatan ? 'Kec. '.$m->kecamatan : '' }}</div>
+                        </td>
+                        <td class="px-4 py-3 text-right tabular-nums">
+                            <div class="font-semibold">{{ Format::rp($b['total']) }}</div>
+                            @if ($b['kegiatan'])
+                                <div class="text-[11px] text-navy-500" title="{{ implode(', ', $b['kegiatan']) }}">{{ count($b['kegiatan']) }} kegiatan</div>
+                            @endif
+                        </td>
+                        <td class="px-4 py-3 text-right font-semibold tabular-nums {{ $b['sisa'] <= 0 ? 'text-rose-600' : 'text-bps-green-700' }}">{{ Format::rp($b['sisa']) }}</td>
+                        <td class="px-4 py-3">
+                            <div class="flex items-center gap-2">
+                                <div class="h-2 flex-1 overflow-hidden rounded-full bg-navy-50">
+                                    <div class="h-full rounded-full {{ HonorService::titik($b['status']) }}" style="width: {{ min(100, $b['persen']) }}%"></div>
                                 </div>
-                            </td>
-                        @endforeach
-                        <td class="px-3 py-2 text-right tabular text-slate-700">{{ Format::rp($r['total_tahun']) }}</td>
-                        <td class="px-3 py-2 whitespace-nowrap">@include('livewire.sibeban.partials.badge', ['status' => $r['fokus'], 'persen' => $r['fokus'] === 'kosong' ? null : $r['persen']])</td>
+                                <span class="w-12 text-right text-xs tabular-nums text-navy-500">{{ Format::persen($b['persen']) }}</span>
+                            </div>
+                        </td>
                     </tr>
                 @empty
-                    <tr><td colspan="{{ count($bulans) + 3 }}" class="px-3 py-10 text-center text-slate-400">Tidak ada mitra yang cocok dengan filter.</td></tr>
+                    <tr><td colspan="5"><x-empty icon="users" title="Tidak ada mitra" text="Ubah filter atau bulan untuk melihat mitra lain." /></td></tr>
                 @endforelse
             </tbody>
         </table>
-    </div>
 
-    {{-- Paginasi --}}
-    <div class="mt-3 flex items-center justify-between text-sm text-slate-500">
-        <div>{{ Format::angka($total) }} mitra · halaman {{ $halaman }} / {{ $jumlahHalaman }}</div>
-        <div class="flex items-center gap-2">
-            <select wire:model.live="perHalaman" class="rounded-lg bg-white px-2 py-1.5 ring-1 ring-slate-200">
-                @foreach ([25, 50, 100, 500] as $n)<option value="{{ $n }}">{{ $n }} / hal</option>@endforeach
-            </select>
-            <button wire:click="previousPage" @disabled($halaman <= 1) class="rounded-lg bg-white px-3 py-1.5 ring-1 ring-slate-200 disabled:opacity-40">‹ Sebelumnya</button>
-            <button wire:click="nextPage" @disabled($halaman >= $jumlahHalaman) class="rounded-lg bg-white px-3 py-1.5 ring-1 ring-slate-200 disabled:opacity-40">Berikutnya ›</button>
+        {{-- Mobile --}}
+        <div class="divide-y divide-line md:hidden">
+            @forelse ($baris as $b)
+                @php $m = $b['mitra']; @endphp
+                <a href="{{ route('sibeban.mitra.show', ['mitra' => $m, 'tahun' => substr($bulan, 0, 4)]) }}" wire:navigate wire:key="mm-{{ $m->id }}" class="block p-4">
+                    <div class="flex items-start justify-between gap-3">
+                        <div class="min-w-0">
+                            <p class="truncate font-semibold">{{ $m->nama }}</p>
+                            <p class="truncate text-xs text-navy-500">{{ $m->sobat_id }} · {{ $m->wilayah() ?: 'wilayah belum diisi' }}</p>
+                        </div>
+                        <span class="chip {{ HonorService::warna($b['status']) }}">{{ Format::persen($b['persen']) }}</span>
+                    </div>
+                    <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-navy-50"><div class="h-full rounded-full {{ HonorService::titik($b['status']) }}" style="width: {{ min(100, $b['persen']) }}%"></div></div>
+                    <div class="mt-2 flex justify-between text-xs tabular-nums">
+                        <span class="text-navy-500">Honor <b class="text-navy-900">{{ Format::rp($b['total']) }}</b></span>
+                        <span class="text-navy-500">Sisa <b class="{{ $b['sisa'] <= 0 ? 'text-rose-600' : 'text-bps-green-700' }}">{{ Format::rp($b['sisa']) }}</b></span>
+                    </div>
+                </a>
+            @empty
+                <x-empty icon="users" title="Tidak ada mitra" text="Ubah filter atau bulan untuk melihat mitra lain." />
+            @endforelse
         </div>
     </div>
+
+    @if ($jumlahHalaman > 1)
+        <div class="mt-4 flex items-center justify-between text-sm">
+            <button wire:click="previousPage" @disabled($halaman <= 1) class="btn btn-ghost btn-sm"><x-icon name="chevron-left" class="size-4" /> Sebelumnya</button>
+            <span class="text-navy-500">Halaman {{ $halaman }} / {{ $jumlahHalaman }}</span>
+            <button wire:click="nextPage" @disabled($halaman >= $jumlahHalaman) class="btn btn-ghost btn-sm">Berikutnya <x-icon name="chevron-right" class="size-4" /></button>
+        </div>
+    @endif
 </div>

@@ -2,12 +2,12 @@
 
 namespace App\Livewire\Sibeban\Kegiatan;
 
-use App\Models\Sibeban\HonorBerjalan;
+use App\Livewire\Sibeban\Monitoring;
 use App\Models\Sibeban\Kegiatan;
 use App\Models\Sibeban\Mitra;
 use App\Models\Sibeban\Penugasan;
+use App\Services\Sibeban\HonorExcelReader;
 use App\Services\Sibeban\HonorService;
-use App\Services\Sibeban\PenugasanExcelReader;
 use App\Services\Sibeban\PenugasanService;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
@@ -20,81 +20,151 @@ class Show extends Component
 
     public Kegiatan $kegiatan;
 
-    // ---- Upload & pratinjau ----
+    // ---- Daftar petugas ----
+    public string $cari = '';
+    public string $filterStatus = '';     // '' | belum | merah | oranye | hijau
+
+    // ---- Pilih petugas ----
+    public bool $pilihTampil = false;
+    public string $pCari = '';
+    public string $pKecamatan = '';
+    public string $pDesa = '';
+    public string $pPosisi = '';
+    public bool $pHanyaTersedia = true;
+    public int $pBatas = 50;
+    public array $pDipilih = [];          // mitra_id terpilih (belum disimpan)
+
+    // ---- Impor honor ----
+    public bool $imporTampil = false;
     public $file;
     public array $pratinjau = [];
     public array $uploadErrors = [];
     public array $uploadWarnings = [];
 
-    // ---- Tabel petugas ----
-    public string $cari = '';
-    public string $filterStatus = '';
-    public ?int $aturId = null;          // penugasan yang panel "Atur"-nya terbuka
-    public string $editJabatan = 'ppl';
-    public array $editHonor = [];        // honor kegiatan ini per bulan
-    public array $editBerjalan = [];     // honor berjalan (rekap) per bulan
-    public array $berjalanAwal = [];
+    // ---- Ubah satu petugas ----
+    public ?int $editId = null;
+    public string $editJabatan = '';
+    public array $editHonor = [];
 
-    // ---- Rekomendasi ----
-    public bool $rekTampil = false;
-    public string $rekJabatan = 'ppl';
-    public string $rekCari = '';
-    public bool $rekSembunyikanMerah = true;
+    public ?int $lepasId = null;
 
     public function mount(Kegiatan $kegiatan): void
     {
         $this->kegiatan = $kegiatan;
     }
 
+    private function wajibBisaUbah(): void
+    {
+        abort_unless($this->kegiatan->bisaDiubah(), 403, 'Hanya admin atau pembuat kegiatan yang dapat mengubah petugas.');
+    }
+
     // =====================================================================
-    // Upload Excel → pratinjau hasil kalkulasi → simpan
+    // Pilih petugas
     // =====================================================================
 
-    public function pratinjauUpload(PenugasanExcelReader $reader): void
+    public function bukaPilih(): void
     {
-        $this->validate([
-            'file' => 'required|file|extensions:xlsx,xls,csv|max:10240',
-        ], [], ['file' => 'file Excel']);
+        $this->wajibBisaUbah();
+        $this->reset(['pCari', 'pKecamatan', 'pDesa', 'pPosisi', 'pDipilih']);
+        $this->pHanyaTersedia = true;
+        $this->pBatas = 50;
+        $this->pilihTampil = true;
+    }
+
+    public function updatedPKecamatan(): void
+    {
+        $this->pDesa = '';
+        $this->pBatas = 50;
+    }
+
+    public function updated(string $p): void
+    {
+        if (in_array($p, ['pCari', 'pDesa', 'pPosisi', 'pHanyaTersedia'], true)) {
+            $this->pBatas = 50;
+        }
+    }
+
+    /** Kandidat: mitra yang belum ada di kegiatan ini + kalkulasi honor di bulan kegiatan. */
+    private function kandidat(): array
+    {
+        $svc = app(HonorService::class);
+        $bulans = $this->kegiatan->bulans();
+        $sudah = $this->kegiatan->penugasans()->pluck('mitra_id')->all();
+
+        $mitras = Mitra::query()
+            ->whereNotIn('id', $sudah)
+            ->when($this->pCari !== '', fn ($q) => $q->where(fn ($w) => $w->where('nama', 'like', "%{$this->pCari}%")->orWhere('sobat_id', 'like', "%{$this->pCari}%")))
+            ->when($this->pKecamatan !== '', fn ($q) => $q->where('kecamatan', $this->pKecamatan))
+            ->when($this->pDesa !== '', fn ($q) => $q->where('desa', $this->pDesa))
+            ->when($this->pPosisi !== '', fn ($q) => $q->where('posisi', $this->pPosisi))
+            ->orderBy('kecamatan')->orderBy('desa')->orderBy('nama')
+            ->get(['id', 'sobat_id', 'nama', 'kecamatan', 'desa', 'posisi']);
+
+        $beban = $svc->beban($mitras->pluck('id')->all(), $bulans);
+        $hasil = [];
+        foreach ($mitras as $m) {
+            $calc = $svc->hitung($beban[$m->id] ?? [], [], $bulans);
+            if ($this->pHanyaTersedia && $calc['sisa_min'] <= 0) {
+                continue;
+            }
+            $hasil[] = ['mitra' => $m, 'calc' => $calc];
+        }
+
+        return $hasil;
+    }
+
+    public function pilihSemua(): void
+    {
+        $this->wajibBisaUbah();
+        $ids = array_map(fn ($k) => $k['mitra']->id, $this->kandidat());
+        $this->pDipilih = array_values(array_unique(array_merge(array_map('intval', $this->pDipilih), $ids)));
+    }
+
+    public function kosongkanPilihan(): void
+    {
+        $this->pDipilih = [];
+    }
+
+    public function simpanPilihan(PenugasanService $svc): void
+    {
+        $this->wajibBisaUbah();
+        $n = $svc->pilih($this->kegiatan, $this->pDipilih);
+        $this->pilihTampil = false;
+        $this->pDipilih = [];
+        session()->flash('sukses', "{$n} petugas ditambahkan. Unduh template untuk mengisi jabatan & honor mereka.");
+    }
+
+    // =====================================================================
+    // Impor template
+    // =====================================================================
+
+    public function bukaImpor(): void
+    {
+        $this->wajibBisaUbah();
+        $this->batalPratinjau();
+        $this->imporTampil = true;
+    }
+
+    public function updatedFile(HonorExcelReader $reader): void
+    {
+        $this->wajibBisaUbah();
+        $this->resetErrorBag('file');
+        $this->validate(['file' => 'required|file|extensions:xlsx,xls,csv|max:10240'], [], ['file' => 'file Excel']);
 
         $hasil = $reader->baca($this->file->getRealPath(), $this->kegiatan);
         $this->uploadErrors = $hasil['errors'];
         $this->uploadWarnings = $hasil['warnings'];
-        $this->pratinjau = $hasil['rows'];
-        $this->hitungPratinjau();
-    }
 
-    /**
-     * Hitung status setiap baris pratinjau:
-     *   total per bulan = honor berjalan (dari Excel) + honor kegiatan ini (honor PPL/PML form kegiatan)
-     */
-    private function hitungPratinjau(): void
-    {
-        if (empty($this->pratinjau)) {
-            return;
-        }
+        // Hitung status: honor kegiatan lain + honor di template
         $svc = app(HonorService::class);
         $bulans = $this->kegiatan->bulans();
-        $mitra = Mitra::whereIn('sobat_id', array_column($this->pratinjau, 'sobat_id'))->get()->keyBy('sobat_id');
-        $sudah = $this->kegiatan->penugasans()->pluck('mitra_id')->flip();
-
-        foreach ($this->pratinjau as $i => $r) {
-            $m = $mitra[$r['sobat_id']] ?? null;
-            $honor = array_fill_keys($bulans, $this->kegiatan->honorDefault($r['jabatan']));
-            $berjalan = [];
-            foreach ($bulans as $b) {
-                $berjalan[$b] = ['total' => (int) ($r['berjalan'][$b] ?? 0), 'limit' => 0, 'rincian' => []];
-            }
-            $this->pratinjau[$i]['honor'] = $honor;
-            $this->pratinjau[$i]['mitra_id'] = $m?->id;
-            $this->pratinjau[$i]['nama_db'] = $m?->nama ?? ($r['nama'] !== '' ? $r['nama'] : '(belum terdaftar)');
-            $this->pratinjau[$i]['mitra_baru'] = $m === null;
-            $this->pratinjau[$i]['sudah'] = $m && isset($sudah[$m->id]);
-            $this->pratinjau[$i]['calc'] = $svc->hitung($berjalan, $honor, $svc->limitFor($this->kegiatan->jenis, $r['jabatan']), $bulans);
+        $lain = $svc->beban(array_column($hasil['rows'], 'mitra_id'), $bulans, $this->kegiatan->id);
+        foreach ($hasil['rows'] as $i => $r) {
+            $hasil['rows'][$i]['calc'] = $svc->hitung($lain[$r['mitra_id']] ?? [], $r['honor'], $bulans);
         }
-
-        // Urutkan: merah → oranye → hijau, lalu % tertinggi
-        usort($this->pratinjau, fn ($a, $b) => [HonorService::URUTAN[$b['calc']['status']], $b['calc']['persen_maks']]
+        usort($hasil['rows'], fn ($a, $b) => [HonorService::URUTAN[$b['calc']['status']], $b['calc']['persen_maks']]
             <=> [HonorService::URUTAN[$a['calc']['status']], $a['calc']['persen_maks']]);
+        $this->pratinjau = $hasil['rows'];
     }
 
     public function buangDariPratinjau(int $i): void
@@ -103,115 +173,67 @@ class Show extends Component
         $this->pratinjau = array_values($this->pratinjau);
     }
 
-    public function buangMerahDariPratinjau(): void
-    {
-        $this->pratinjau = array_values(array_filter($this->pratinjau, fn ($r) => $r['calc']['status'] !== 'merah'));
-    }
-
     public function batalPratinjau(): void
     {
         $this->reset(['file', 'pratinjau', 'uploadErrors', 'uploadWarnings']);
+        $this->resetErrorBag();
     }
 
-    public function simpanPratinjau(PenugasanService $service): void
+    public function simpanImpor(PenugasanService $svc): void
     {
+        $this->wajibBisaUbah();
         if (empty($this->pratinjau)) {
             return;
         }
-        $rows = array_map(fn ($r) => [
-            'sobat_id' => $r['sobat_id'],
-            'nama' => $r['nama'],
-            'jabatan' => $r['jabatan'],
-            'berjalan' => $r['berjalan'],
-            'honor' => $r['honor'],
-        ], $this->pratinjau);
-
-        $stat = $service->simpanUpload($this->kegiatan, $rows);
+        $stat = $svc->simpanImpor($this->kegiatan, array_map(fn ($r) => [
+            'mitra_id' => $r['mitra_id'], 'jabatan' => $r['jabatan'], 'honor' => $r['honor'],
+        ], $this->pratinjau));
+        $lebih = count(array_filter($this->pratinjau, fn ($r) => $r['calc']['status'] === 'merah'));
         $this->batalPratinjau();
-        session()->flash('sukses', "Tersimpan: {$stat['baru']} petugas baru, {$stat['diperbarui']} diperbarui"
-            .($stat['mitra_baru'] ? ", {$stat['mitra_baru']} mitra baru ditambahkan ke master" : '').'.');
+        $this->imporTampil = false;
+        session()->flash('sukses', "Honor tersimpan: {$stat['diperbarui']} petugas diperbarui".($stat['baru'] ? ", {$stat['baru']} petugas baru ditambahkan" : '').'.'
+            .($lebih ? " Perhatian: {$lebih} petugas melebihi limit bulanan." : ''));
     }
 
     // =====================================================================
-    // Pengelolaan petugas
+    // Ubah / lepas satu petugas
     // =====================================================================
 
-    public function atur(int $penugasanId): void
+    public function ubah(int $penugasanId): void
     {
-        if ($this->aturId === $penugasanId) {
-            $this->aturId = null;
-
-            return;
-        }
+        $this->wajibBisaUbah();
         $p = Penugasan::with('honors')->where('kegiatan_id', $this->kegiatan->id)->findOrFail($penugasanId);
-        $this->aturId = $p->id;
-        $this->editJabatan = $p->jabatan;
+        $this->editId = $p->id;
+        $this->editJabatan = (string) $p->jabatan;
         $ada = $p->honorPerBulan();
-        $rekap = HonorBerjalan::where('mitra_id', $p->mitra_id)->whereIn('bulan', $this->kegiatan->bulans())->pluck('jumlah', 'bulan');
         $this->editHonor = [];
-        $this->editBerjalan = [];
         foreach ($this->kegiatan->bulans() as $b) {
-            $this->editHonor[$b] = $ada[$b] ?? 0;
-            $this->editBerjalan[$b] = (int) ($rekap[$b] ?? 0);
+            $this->editHonor[$b] = (int) ($ada[$b] ?? 0);
         }
-        $this->berjalanAwal = $this->editBerjalan;
         $this->resetValidation();
     }
 
-    public function simpanEdit(PenugasanService $service): void
+    public function simpanUbah(PenugasanService $svc): void
     {
+        $this->wajibBisaUbah();
         $this->validate([
-            'editJabatan' => 'required|in:ppl,pml',
+            'editJabatan' => 'nullable|string|max:60',
             'editHonor.*' => 'required|integer|min:0',
-            'editBerjalan.*' => 'required|integer|min:0',
-        ], [], ['editHonor.*' => 'honor', 'editBerjalan.*' => 'honor berjalan']);
-
-        $p = Penugasan::with('mitra')->where('kegiatan_id', $this->kegiatan->id)->findOrFail($this->aturId);
-        $service->simpan($this->kegiatan, $p->mitra, $this->editJabatan, array_map('intval', $this->editHonor));
-
-        // Simpan honor berjalan hanya untuk bulan yang benar-benar diubah
-        $berubah = [];
-        foreach ($this->editBerjalan as $b => $v) {
-            if ((int) $v !== (int) ($this->berjalanAwal[$b] ?? -1)) {
-                $berubah[$b] = (int) $v;
-            }
-        }
-        if ($berubah) {
-            $service->simpanBerjalan($p->mitra, $this->kegiatan, $berubah, 'Diubah manual di kegiatan: '.$this->kegiatan->nama);
-            $this->berjalanAwal = array_map('intval', $this->editBerjalan);
-        }
-        session()->flash('sukses', "Honor {$p->mitra->nama} diperbarui.");
+        ], [], ['editHonor.*' => 'honor', 'editJabatan' => 'jabatan']);
+        $p = Penugasan::with('mitra')->where('kegiatan_id', $this->kegiatan->id)->findOrFail($this->editId);
+        $svc->simpan($this->kegiatan, $p->mitra_id, $this->editJabatan, array_map('intval', $this->editHonor));
+        $this->editId = null;
+        session()->flash('sukses', "Jabatan & honor {$p->mitra->nama} diperbarui.");
     }
 
-    public function isiDefault(): void
+    public function lepas(PenugasanService $svc): void
     {
-        foreach ($this->editHonor as $b => $v) {
-            $this->editHonor[$b] = $this->kegiatan->honorDefault($this->editJabatan);
+        $this->wajibBisaUbah();
+        $p = $svc->lepas($this->kegiatan, (int) $this->lepasId);
+        $this->lepasId = null;
+        if ($p) {
+            session()->flash('sukses', "{$p->mitra->nama} dikeluarkan dari kegiatan ini.");
         }
-    }
-
-    /**
-     * Lepas penugasan — bisa penugasan di kegiatan ini, ATAU penugasan mitra
-     * di kegiatan lain (agar limitnya longgar untuk kegiatan ini).
-     */
-    public function lepas(int $penugasanId, PenugasanService $service): void
-    {
-        $p = $service->lepas($penugasanId);
-        if (! $p) {
-            return;
-        }
-        if ($p->kegiatan_id === $this->kegiatan->id && $this->aturId === $p->id) {
-            $this->aturId = null;
-        }
-        session()->flash('sukses', "{$p->mitra->nama} dilepas dari kegiatan \"{$p->kegiatan->nama}\".");
-    }
-
-    public function tambahPetugas(int $mitraId, string $jabatan, PenugasanService $service): void
-    {
-        abort_unless(in_array($jabatan, ['ppl', 'pml'], true), 422);
-        $m = Mitra::findOrFail($mitraId);
-        $service->tambahDefault($this->kegiatan, $m, $jabatan);
-        session()->flash('sukses', "{$m->nama} ditambahkan sebagai ".strtoupper($jabatan).'.');
     }
 
     public function filter(string $s): void
@@ -228,23 +250,26 @@ class Show extends Component
         $penugasans = $this->kegiatan->penugasans()->with(['mitra', 'honors'])->get();
         $bebanLain = $svc->beban($penugasans->pluck('mitra_id')->all(), $bulans, $this->kegiatan->id);
 
-        $ringkas = ['merah' => 0, 'oranye' => 0, 'hijau' => 0, 'kosong' => 0];
+        $ringkas = ['belum' => 0, 'hijau' => 0, 'oranye' => 0, 'merah' => 0];
         $petugas = [];
         foreach ($penugasans as $p) {
-            $bm = $bebanLain[$p->mitra_id] ?? [];
-            $calc = $svc->hitung($bm, $p->honorPerBulan(), $svc->limitFor($this->kegiatan->jenis, $p->jabatan), $bulans);
-            $ringkas[$calc['status']]++;
-
-            if ($this->filterStatus !== '' && $calc['status'] !== $this->filterStatus) {
+            $honor = $p->honorPerBulan();
+            $calc = $svc->hitung($bebanLain[$p->mitra_id] ?? [], $honor, $bulans);
+            $belum = array_sum($honor) === 0;
+            $kunci = $belum ? 'belum' : ($calc['status'] === 'kosong' ? 'hijau' : $calc['status']);
+            $ringkas[$kunci]++;
+            if ($this->filterStatus !== '' && $kunci !== $this->filterStatus) {
                 continue;
             }
-            if ($this->cari !== '' && ! str_contains(strtolower($p->mitra->nama.' '.$p->mitra->sobat_id), strtolower($this->cari))) {
+            if ($this->cari !== '' && ! str_contains(mb_strtolower($p->mitra->nama.' '.$p->mitra->sobat_id.' '.$p->jabatan.' '.$p->mitra->desa.' '.$p->mitra->kecamatan), mb_strtolower($this->cari))) {
                 continue;
             }
-            $petugas[] = ['p' => $p, 'calc' => $calc, 'lain' => HonorService::kegiatanLain($bm)];
+            $petugas[] = ['p' => $p, 'calc' => $calc, 'belum' => $belum];
         }
-        usort($petugas, fn ($a, $b) => [HonorService::URUTAN[$b['calc']['status']], $b['calc']['persen_maks']]
-            <=> [HonorService::URUTAN[$a['calc']['status']], $a['calc']['persen_maks']]);
+        usort($petugas, fn ($a, $b) => [$a['belum'], -HonorService::URUTAN[$a['calc']['status']], (string) $a['p']->mitra->kecamatan, $a['p']->mitra->nama]
+            <=> [$b['belum'], -HonorService::URUTAN[$b['calc']['status']], (string) $b['p']->mitra->kecamatan, $b['p']->mitra->nama]);
+
+        $kandidat = $this->pilihTampil ? $this->kandidat() : [];
 
         return view('livewire.sibeban.kegiatan.show', [
             'bulans' => $bulans,
@@ -252,11 +277,12 @@ class Show extends Component
             'ringkas' => $ringkas,
             'jumlahPetugas' => $penugasans->count(),
             'totalHonor' => $penugasans->sum(fn ($p) => $p->honors->sum('jumlah')),
-            'limitPpl' => $svc->limitFor($this->kegiatan->jenis, 'ppl'),
-            'limitPml' => $svc->limitFor($this->kegiatan->jenis, 'pml'),
-            'rekomendasi' => $this->rekTampil
-                ? $svc->rekomendasi($this->kegiatan, $this->rekJabatan, $this->rekCari, 25, $this->rekSembunyikanMerah)
-                : [],
-        ])->title($this->kegiatan->nama);
+            'limit' => $svc->limit(),
+            'bisa' => $this->kegiatan->bisaDiubah(),
+            'kandidat' => array_slice($kandidat, 0, $this->pBatas),
+            'jumlahKandidat' => count($kandidat),
+            'opsi' => $this->pilihTampil ? Monitoring::opsiWilayah($this->pKecamatan) : null,
+            'editPetugas' => $this->editId ? $penugasans->firstWhere('id', $this->editId) : null,
+        ])->title($this->kegiatan->nama.' · SIBEBAN');
     }
 }

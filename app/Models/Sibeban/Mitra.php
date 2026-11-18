@@ -9,11 +9,17 @@ class Mitra extends Model
 {
     protected $table = 'sibeban_mitras';
 
-    protected $fillable = ['sobat_id', 'nama', 'posisi', 'email'];
+    protected $fillable = ['sobat_id', 'nama', 'kecamatan', 'desa', 'posisi', 'email'];
 
     public function penugasans(): HasMany
     {
         return $this->hasMany(Penugasan::class);
+    }
+
+    /** 'Desa X, Kec. Y' */
+    public function wilayah(): string
+    {
+        return trim(implode(', ', array_filter([$this->desa, $this->kecamatan ? 'Kec. '.$this->kecamatan : null])));
     }
 
     public function honorBerjalans(): HasMany

@@ -2,85 +2,74 @@
 
 namespace App\Models;
 
-use App\Support\Settings;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Support\Carbon;
 
 class Surat extends Model
 {
     use SoftDeletes;
 
     protected $fillable = [
-        'jenis', 'tahun', 'nomor_urut', 'nomor_surat', 'tanggal', 'tanggal_mulai', 'tanggal_selesai', 'sifat', 'klasifikasi', 'perihal',
-        'pihak', 'tempat', 'pegawai', 'nomor_asal', 'keterangan', 'file_path', 'file_name', 'link', 'user_id', 'pembuat',
+        'jenis', 'tahun', 'grup', 'nomor_urut', 'sisip', 'no_urut', 'nomor_surat', 'lengkap', 'tanggal', 'sifat', 'klasifikasi',
+        'perihal', 'tujuan', 'tim_teknis', 'jenis_fp', 'tanggal_fp', 'nama_petugas', 'honor', 'tanggal_mulai', 'tanggal_selesai',
+        'link_surat', 'status', 'link_oleh', 'link_at', 'pihak', 'tempat', 'pegawai', 'nomor_asal', 'keterangan',
+        'file_path', 'file_name', 'link', 'user_id', 'pembuat',
     ];
 
     protected function casts(): array
     {
-        return ['tanggal' => 'date', 'tanggal_mulai' => 'date', 'tanggal_selesai' => 'date', 'pegawai' => 'array'];
+        return [
+            'tanggal' => 'date', 'tanggal_mulai' => 'date', 'tanggal_selesai' => 'date', 'tanggal_fp' => 'date',
+            'link_at' => 'datetime', 'pegawai' => 'array', 'lengkap' => 'boolean',
+        ];
     }
-
-    public const SIFAT = ['B' => 'Biasa', 'P' => 'Penting', 'T' => 'Terbatas', 'R' => 'Rahasia'];
 
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class)->withTrashed();
     }
 
-    /** Definisi semua jenis nomor (config/sicatur.php) dengan format yang sudah diubah admin. */
-    public static function jenisList(): array
+    public function logs(): HasMany
     {
-        $list = [];
-        foreach (config('sicatur.jenis') as $kode => $j) {
-            $j['format'] = (string) (Settings::get('sicatur_format_'.$kode) ?: $j['format']);
-            $j['kode'] = $kode;
-            $list[$kode] = $j;
+        return $this->hasMany(SuratLog::class)->latest();
+    }
+
+    public static function cfg(string $jenis): ?array
+    {
+        return config("sicatur.jenis.$jenis");
+    }
+
+    public static function labelJenis(string $jenis): string
+    {
+        return config("sicatur.jenis.$jenis.label") ?? config("sicatur.lama.$jenis") ?? strtoupper($jenis);
+    }
+
+    /** Nomor untuk ditampilkan; baris lama yang Format Nomor-nya belum tersusun memakai No Urut. */
+    public function nomorTampil(): string
+    {
+        return $this->lengkap && $this->nomor_surat !== '' ? $this->nomor_surat : 'No Urut '.($this->no_urut ?: $this->nomor_urut).' (data belum lengkap)';
+    }
+
+    /** Nilai sebuah isian form sebagai teks (Y-m-d untuk tanggal). */
+    public function nilai(string $attr): string
+    {
+        $v = $this->{$attr};
+        if ($v instanceof \DateTimeInterface) {
+            return $v->format('Y-m-d');
         }
 
-        return $list;
+        return (string) ($v ?? '');
     }
 
-    public static function jenis(string $kode): ?array
+    /** Status SK: menunggu | selesai | lama (baris lama tanpa status). */
+    public function kunciStatus(): string
     {
-        return self::jenisList()[$kode] ?? null;
-    }
-
-    public static function labelJenis(string $kode): string
-    {
-        return config("sicatur.jenis.$kode.singkat") ?? config("sicatur.lama.$kode") ?? strtoupper($kode);
-    }
-
-    /** Nomor terakhir yang sudah terbit di luar aplikasi (diisi admin) untuk jenis & tahun tsb. */
-    public static function nomorAwal(string $kode, int $tahun): int
-    {
-        return (int) Settings::get("sicatur_mulai_{$kode}_{$tahun}", 0);
-    }
-
-    /** Nomor urut berikutnya & nomor lengkap sesuai format jenis. */
-    public static function buatNomor(string $kode, Carbon $tanggal, ?string $klasifikasi, ?string $sifat = 'B'): array
-    {
-        $j = self::jenis($kode) ?? ['format' => '{nomor}/{tahun}', 'digit' => 3, 'klasifikasi' => null];
-        $tahun = (int) $tanggal->format('Y');
-        $terakhir = max((int) static::withTrashed()->where('jenis', $kode)->where('tahun', $tahun)->max('nomor_urut'), self::nomorAwal($kode, $tahun));
-        $urut = $terakhir + 1;
-
-        return [$tahun, $urut, self::rangkai($j, $urut, $tanggal, $klasifikasi, $sifat)];
-    }
-
-    public static function rangkai(array $j, int $urut, Carbon $tanggal, ?string $klasifikasi, ?string $sifat = 'B'): string
-    {
-        $romawi = ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII'][(int) $tanggal->format('n')];
-
-        return strtr($j['format'], [
-            '{nomor}' => (int) $j['digit'] > 0 ? str_pad((string) $urut, (int) $j['digit'], '0', STR_PAD_LEFT) : (string) $urut,
-            '{klasifikasi}' => $klasifikasi ?: ($j['klasifikasi'] ?? ''),
-            '{sifat}' => $sifat ?: 'B',
-            '{hari}' => $tanggal->format('d'),
-            '{bulan}' => $tanggal->format('m'),
-            '{bulan_romawi}' => $romawi,
-            '{tahun}' => (string) $tanggal->format('Y'),
-        ]);
+        return match ($this->status) {
+            config('sicatur.lengkapi.selesai') => 'selesai',
+            config('sicatur.lengkapi.proses') => 'menunggu',
+            default => 'lama',
+        };
     }
 }

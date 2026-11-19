@@ -64,7 +64,7 @@ Route::middleware(['auth', 'account'])->group(function () {
         Route::get('/sicatur/lampiran/{surat}', [SuratController::class, 'file'])->name('sicatur.file');
         Route::get('/sicatur/export', [SuratController::class, 'export'])->name('sicatur.export');
         Route::get('/sicatur/pedoman', [SuratController::class, 'pedoman'])->name('sicatur.pedoman');
-        Route::get('/sicatur/template-riwayat', [SuratController::class, 'template'])->name('sicatur.template')->middleware('role:admin');
+        Route::get('/sicatur/klasifikasi', [SuratController::class, 'klasifikasi'])->name('sicatur.klasifikasi');
         Route::get('/siku', Livewire\Portal\Siku::class)->name('siku');
         Route::get('/kepegawaian', Livewire\Portal\Kepegawaian::class)->name('kepegawaian');
     });

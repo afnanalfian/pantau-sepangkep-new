@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\SicaturKlasifikasi;
 use App\Models\Surat;
 use App\Support\Settings;
 use App\Support\Spreadsheet;
@@ -28,51 +29,53 @@ class SuratController extends Controller
                 'Content-Disposition' => 'inline; filename="Buku Pedoman SICATUR.pdf"',
             ]);
         }
-        abort_unless($url = Settings::get('sicatur_pedoman_url'), 404);
 
-        return redirect()->away($url);
+        return redirect()->away(Settings::get('sicatur_pedoman_url', config('sicatur.url_pedoman')));
     }
 
+    /** Daftar kode klasifikasi untuk dropdown cari: [{k, u, s}] */
+    public function klasifikasi()
+    {
+        $data = SicaturKlasifikasi::query()->orderBy('sumber', 'desc')->orderBy('urutan')->orderBy('kode')
+            ->get(['kode', 'uraian', 'sumber'])
+            ->map(fn ($k) => ['k' => $k->kode, 'u' => (string) $k->uraian, 's' => $k->sumber]);
+
+        return response()->json($data)->header('Cache-Control', 'no-store, max-age=0');
+    }
+
+    /** Ekspor hasil pencarian Riwayat. */
     public function export(Request $request)
     {
         $jenis = (string) $request->input('jenis', '');
-        $tahun = (int) ($request->input('tahun') ?: now()->year);
-        $rows = Surat::query()->where('tahun', $tahun)
+        $kata = trim((string) $request->input('kata', ''));
+        $q = Surat::query()
             ->when($jenis !== '', fn ($q) => $q->where('jenis', $jenis))
-            ->orderBy('jenis')->orderBy('nomor_urut')->get()
-            ->map(fn ($s) => [
-                Surat::labelJenis($s->jenis), $s->nomor_urut, $s->nomor_surat, $s->tanggal->format('d/m/Y'), $s->klasifikasi, $s->perihal,
-                $s->pegawai ? implode(', ', $s->pegawai) : '',
-                $s->tanggal_mulai ? $s->tanggal_mulai->format('d/m/Y').($s->tanggal_selesai ? ' – '.$s->tanggal_selesai->format('d/m/Y') : '') : '',
-                $s->tempat, $s->pihak, $s->pembuat, $s->keterangan, $s->link,
-            ]);
-        $label = $jenis !== '' ? Surat::labelJenis($jenis) : 'Semua jenis';
+            ->when($request->input('dari'), fn ($q, $v) => $q->whereDate('tanggal', '>=', $v))
+            ->when($request->input('sampai'), fn ($q, $v) => $q->whereDate('tanggal', '<=', $v))
+            ->when($kata !== '', function ($q) use ($kata) {
+                foreach (preg_split('/\s+/', $kata) as $w) {
+                    $q->where(fn ($x) => $x->where('nomor_surat', 'like', "%{$w}%")->orWhere('perihal', 'like', "%{$w}%")
+                        ->orWhere('tujuan', 'like', "%{$w}%")->orWhere('pembuat', 'like', "%{$w}%")
+                        ->orWhere('klasifikasi', 'like', "%{$w}%")->orWhere('nama_petugas', 'like', "%{$w}%"));
+                }
+            })
+            ->orderBy('jenis')->orderBy('tanggal')->orderBy('nomor_urut')->orderBy('sisip');
+
+        $rows = $q->get()->map(fn (Surat $s) => [
+            Surat::labelJenis($s->jenis), $s->no_urut ?: $s->nomor_urut, $s->nomorTampil(), $s->tanggal?->format('d/m/Y'),
+            $s->klasifikasi, $s->tim_teknis, $s->jenis_fp, $s->tanggal_fp?->format('d/m/Y'),
+            $s->pembuat, $s->tujuan, $s->perihal, $s->nama_petugas, $s->honor,
+            $s->tanggal_mulai?->format('d/m/Y'), $s->tanggal_selesai?->format('d/m/Y'), $s->status, $s->link_surat,
+        ]);
 
         return Spreadsheet::download(
-            'sicatur_'.($jenis ?: 'semua').'_'.$tahun.'.xlsx',
+            'sicatur_'.($jenis ?: 'semua').'_'.now()->format('Ymd').'.xlsx',
             'Riwayat',
-            ['Jenis', 'Urut', 'Nomor', 'Tanggal', 'Klasifikasi', 'Perihal', 'Pegawai', 'Pelaksanaan', 'Tempat', 'Pihak', 'Pembuat', 'Keterangan', 'Link'],
+            ['Jenis', 'No Urut', 'Format Nomor', 'Tanggal Surat', 'Kode Klasifikasi', 'Tim Teknis', 'Jenis FP', 'Tanggal FP', 'Pembuat', 'Tujuan Surat',
+                'Perihal', 'Nama Petugas', 'Honor', 'Mulai Berlaku', 'Selesai Berlaku', 'Status', 'Link Surat'],
             $rows,
-            'SICATUR – Riwayat Nomor '.$label.' '.$tahun,
+            'SICATUR – Riwayat Nomor',
             'BPS Kabupaten Pangkajene dan Kepulauan · dicetak '.now()->format('d/m/Y H:i')
-        );
-    }
-
-    /** Template impor riwayat dari SICATUR lama. */
-    public function template()
-    {
-        $contoh = [];
-        foreach (Surat::jenisList() as $kode => $j) {
-            $contoh[] = [$j['singkat'], 1, Surat::rangkai($j, 1, now()->startOfYear(), $j['klasifikasi']), now()->startOfYear()->format('d/m/Y'), $j['klasifikasi'], 'Contoh perihal', '', 'Nama Pembuat'];
-        }
-
-        return Spreadsheet::download(
-            'template-impor-riwayat-sicatur.xlsx',
-            'Riwayat',
-            ['Jenis', 'Nomor Urut', 'Nomor Surat', 'Tanggal', 'Klasifikasi', 'Perihal', 'Pihak', 'Pembuat'],
-            $contoh,
-            'Template impor riwayat SICATUR',
-            'Jenis diisi: '.implode(' / ', array_map(fn ($j) => $j['singkat'], Surat::jenisList())).'. Hapus baris contoh sebelum impor.'
         );
     }
 }

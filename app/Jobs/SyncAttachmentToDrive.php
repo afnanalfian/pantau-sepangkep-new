@@ -39,11 +39,12 @@ class SyncAttachmentToDrive implements ShouldQueue
         }
 
         // Kunci per-tugas agar pembuatan folder tidak dobel ketika banyak file diunggah bersamaan.
+        // Semua file (surat tugas, dokumen, gambar, output, isi folder unggahan) langsung di folder tugas.
         Cache::lock('drive-task-'.$a->task_id, 120)->block(60, function () use ($a, $drive) {
-            $drive->categoryFolderId($a->task, $a->category, $a->folder_label);
+            $drive->taskFolderId($a->task);
         });
 
-        $parent = $drive->categoryFolderId($a->task->fresh(), $a->category, $a->folder_label);
+        $parent = $drive->taskFolderId($a->task->fresh());
         $result = $drive->upload($disk->path($a->local_path), $a->name, $a->mime, $parent);
 
         $a->update([

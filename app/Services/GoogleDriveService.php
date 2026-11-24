@@ -16,7 +16,8 @@ use RuntimeException;
  * Integrasi Google Drive via REST API v3 (tanpa SDK).
  *
  * Struktur folder:
- *   PANTAU SEPANGKEP / {Nama Pegawai} / {Bulan Tahun} / {Kode - Judul Tugas} / {Kategori} / file
+ *   PANTAU SEPANGKEP / {Nama Pegawai} / {Bulan Tahun} / {Judul Tugas} / file
+ *   (judul sama di bulan yang sama → "Judul (2)", "Judul (3)", …)
  *
  * Mode autentikasi:
  *   - oauth           : refresh token akun Google kantor (direkomendasikan; file tersimpan di Drive akun tsb)
@@ -143,13 +144,31 @@ class GoogleDriveService
         );
     }
 
+    /**
+     * Nama folder tugas = judul tugas. Bila pegawai yang sama punya tugas lain berjudul sama
+     * di bulan yang sama, folder berikutnya diberi akhiran " (2)", " (3)", … supaya file tidak tercampur.
+     */
+    public function taskFolderName(Task $task): string
+    {
+        $judul = Str::limit($this->sanitize($task->title), 100, '');
+        $bulan = \Illuminate\Support\Carbon::parse($task->created_at ?? now());
+        $sebelum = Task::withTrashed()
+            ->where('assignee_id', $task->assignee_id)
+            ->where('id', '<', $task->id)
+            ->whereBetween('created_at', [$bulan->copy()->startOfMonth(), $bulan->copy()->endOfMonth()])
+            ->pluck('title')
+            ->filter(fn ($t) => mb_strtolower(Str::limit($this->sanitize((string) $t), 100, '')) === mb_strtolower($judul))
+            ->count();
+
+        return $sebelum > 0 ? $judul.' ('.($sebelum + 1).')' : $judul;
+    }
+
     public function taskFolderId(Task $task): string
     {
         if ($task->drive_folder_id) {
             return $task->drive_folder_id;
         }
-        $name = $task->code.' - '.Str::limit($this->sanitize($task->title), 80, '');
-        $id = $this->ensureFolder('task:'.$task->id, $name, $this->monthFolderId($task->assignee, $task->created_at));
+        $id = $this->ensureFolder('task:'.$task->id, $this->taskFolderName($task), $this->monthFolderId($task->assignee, $task->created_at));
 
         $task->forceFill([
             'drive_folder_id' => $id,
@@ -159,16 +178,67 @@ class GoogleDriveService
         return $id;
     }
 
-    public function categoryFolderId(Task $task, string $category, ?string $sub = null): string
+    /**
+     * Folder Drive milik pengguna (PANTAU SEPANGKEP / Nama Pegawai), dibuat bila belum ada,
+     * dan dibagikan ke email pengguna (bisa melihat) bila emailnya diisi.
+     *
+     * @return array{id:string, url:string, dibagikan:?string}
+     */
+    public function userFolder(User $user): array
     {
-        $label = \App\Models\TaskAttachment::CATEGORIES[$category]['folder'] ?? $category;
-        $id = $this->ensureFolder('task:'.$task->id.':'.$category, $label, $this->taskFolderId($task));
+        $id = $this->userFolderId($user);
+        $email = trim((string) $user->email);
+        $kunciBagi = 'share:user:'.$user->id;
+        $sudah = DriveFolder::where('key', $kunciBagi)->value('drive_id');
 
-        if ($sub) {
-            $id = $this->ensureFolder('task:'.$task->id.':'.$category.':'.md5($sub), $this->sanitize($sub), $id);
+        if ($email !== '' && $sudah !== mb_strtolower($email)) {
+            $r = $this->http()->post(self::API.'/files/'.$id.'/permissions?supportsAllDrives=true&sendNotificationEmail=false', [
+                'type' => 'user', 'role' => 'reader', 'emailAddress' => $email,
+            ]);
+            if ($r->successful()) {
+                DriveFolder::updateOrCreate(['key' => $kunciBagi], ['drive_id' => mb_strtolower($email)]);
+                $sudah = mb_strtolower($email);
+            }
+        }
+        if (! $sudah) {
+            $this->applySharing($id); // mengikuti GOOGLE_DRIVE_SHARE (domain / anyone) bila diatur
         }
 
-        return $id;
+        return ['id' => $id, 'url' => 'https://drive.google.com/drive/folders/'.$id, 'dibagikan' => $sudah];
+    }
+
+    /** ID folder pengguna yang sudah pernah dibuat (tanpa memanggil Drive). */
+    public function cachedUserFolderId(User $user): ?string
+    {
+        return DriveFolder::where('key', 'user:'.$user->id)->value('drive_id');
+    }
+
+    /** Ganti nama file/folder di Drive. */
+    public function rename(string $id, string $name): void
+    {
+        $this->http()->patch(self::API.'/files/'.$id.'?supportsAllDrives=true', ['name' => $this->sanitize($name)]);
+    }
+
+    /** Pindahkan file ke folder lain. */
+    public function move(string $fileId, string $toFolderId): void
+    {
+        $parents = $this->http()->get(self::API.'/files/'.$fileId, ['fields' => 'parents', 'supportsAllDrives' => 'true'])->json('parents') ?? [];
+        $hapus = implode(',', array_diff($parents, [$toFolderId]));
+        if (in_array($toFolderId, $parents, true) && $hapus === '') {
+            return;
+        }
+        $this->http()->patch(self::API.'/files/'.$fileId.'?'.http_build_query(array_filter([
+            'supportsAllDrives' => 'true', 'addParents' => $toFolderId, 'removeParents' => $hapus ?: null,
+        ])), []);
+    }
+
+    /** Jumlah isi folder (tidak termasuk sampah). */
+    public function countChildren(string $folderId): int
+    {
+        return count($this->http()->get(self::API.'/files', [
+            'q' => "'{$folderId}' in parents and trashed = false", 'fields' => 'files(id)', 'pageSize' => 10,
+            'supportsAllDrives' => 'true', 'includeItemsFromAllDrives' => 'true',
+        ])->json('files') ?? []);
     }
 
     public function ensureFolder(string $key, string $name, string $parentId): string

@@ -23,6 +23,25 @@
                     <dd class="font-medium">@forelse ($user->teams as $t){{ $t->name }}{{ $t->pivot->role === 'ketua' ? ' (Ketua)' : '' }}@if(!$loop->last), @endif @empty – @endforelse</dd></div>
                 @if ($leave)<div class="flex px-5 py-3"><dt class="w-24 text-navy-500">Status</dt><dd class="font-medium text-amber-700">{{ $leave->type_label }} s.d. {{ tgl($leave->end_date) }}</dd></div>@endif
             </dl>
+            @if ($driveAktif)
+                <div class="border-t border-line px-5 py-4">
+                    <p class="text-sm font-bold">Folder Google Drive saya</p>
+                    <p class="mt-0.5 text-xs text-navy-500">Semua file tugas Anda tersimpan di sini, per bulan lalu per judul tugas.</p>
+                    @if ($driveFolderId && $driveSiap)
+                        <a href="https://drive.google.com/drive/folders/{{ $driveFolderId }}" target="_blank" rel="noopener" class="btn btn-blue btn-sm mt-3 w-full justify-center">
+                            <x-icon name="external" class="size-4" /> Buka folder Drive</a>
+                    @else
+                        <button wire:click="bukaFolderDrive" wire:loading.attr="disabled" class="btn btn-blue btn-sm mt-3 w-full justify-center">
+                            <x-icon name="external" class="size-4" /> <span wire:loading.remove wire:target="bukaFolderDrive">{{ $driveFolderId ? 'Bagikan folder ke email saya' : 'Siapkan folder Drive saya' }}</span><span wire:loading wire:target="bukaFolderDrive">Menyiapkan folder…</span></button>
+                        @if ($driveFolderId)
+                            <a href="https://drive.google.com/drive/folders/{{ $driveFolderId }}" target="_blank" rel="noopener" class="mt-2 block text-center text-xs font-semibold text-bps-blue-700">Buka folder Drive →</a>
+                        @endif
+                    @endif
+                    @if (! $user->email)
+                        <p class="mt-2 text-xs text-amber-700">Isi email Google Anda di bagian Kontak supaya folder ini dibagikan ke akun Anda dan bisa dibuka.</p>
+                    @endif
+                </div>
+            @endif
             <p class="border-t border-line px-5 py-3 text-xs text-navy-500">Nama, NIP, jabatan, dan tim diatur oleh admin.</p>
         </section>
 

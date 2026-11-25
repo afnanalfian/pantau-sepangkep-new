@@ -19,7 +19,7 @@ class User extends Authenticatable
     use Notifiable, SoftDeletes;
 
     protected $fillable = [
-        'username', 'name', 'nip', 'jabatan', 'email', 'phone', 'avatar_path', 'password',
+        'username', 'name', 'nip', 'nip_lama', 'jabatan', 'golongan', 'pangkat', 'email', 'phone', 'avatar_path', 'password',
         'is_admin', 'is_pimpinan', 'is_pegawai', 'is_petugas_presensi', 'is_keuangan', 'is_active', 'must_change_password', 'monthly_target',
         'password_changed_at', 'last_login_at', 'last_seen_at',
     ];
@@ -110,6 +110,16 @@ class User extends Authenticatable
         $parts = array_values(array_filter($parts, fn ($p) => $p !== '' && ! str_contains($p, ',') && ! in_array(Str::lower(rtrim($p, '.')), $skip)));
 
         return Str::upper(Str::substr($parts[0] ?? '?', 0, 1).Str::substr($parts[1] ?? '', 0, 1));
+    }
+
+    /** "Penata Muda (III/a)" — dipakai di profil & daftar pegawai. */
+    public function getPangkatGolonganAttribute(): ?string
+    {
+        if (! $this->pangkat && ! $this->golongan) {
+            return null;
+        }
+
+        return trim(($this->pangkat ?? '').($this->golongan ? ($this->pangkat ? ' ('.$this->golongan.')' : $this->golongan) : ''));
     }
 
     public function getAvatarUrlAttribute(): ?string

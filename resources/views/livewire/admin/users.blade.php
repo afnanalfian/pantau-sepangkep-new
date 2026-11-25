@@ -6,7 +6,7 @@
                 <button @click="open = !open" class="btn btn-ghost"><x-icon name="upload" class="size-4" /> Import Excel <x-icon name="chevron-down" class="size-4" /></button>
                 <div x-show="open" x-cloak @click.outside="open = false" class="absolute right-0 z-20 mt-2 w-72 rounded-2xl border border-line bg-white p-1.5 shadow-xl">
                     <button wire:click="openImport('akun')" @click="open = false" class="w-full rounded-xl px-3 py-2.5 text-left hover:bg-navy-50"><b class="block text-sm">Import akun</b><span class="text-xs text-navy-500">Kolom: username, password</span></button>
-                    <button wire:click="openImport('biodata')" @click="open = false" class="w-full rounded-xl px-3 py-2.5 text-left hover:bg-navy-50"><b class="block text-sm">Import biodata</b><span class="text-xs text-navy-500">Kolom: username, nama, nip, jabatan</span></button>
+                    <button wire:click="openImport('biodata')" @click="open = false" class="w-full rounded-xl px-3 py-2.5 text-left hover:bg-navy-50"><b class="block text-sm">Import biodata</b><span class="text-xs text-navy-500">Kolom: username, nama, nip_baru, nip_lama, jabatan, golongan, pangkat, nomor_wa</span></button>
                 </div>
             </div>
             <button wire:click="create" class="btn btn-blue"><x-icon name="plus" class="size-4" /> Tambah akun</button>
@@ -45,7 +45,7 @@
                         <tr class="{{ $u->is_active ? '' : 'bg-paper/70 text-navy-500' }}" wire:key="u-{{ $u->id }}">
                             <td class="px-5 py-3"><span class="flex items-center gap-3"><x-avatar :user="$u" size="sm" />
                                 <span class="min-w-0"><span class="block truncate font-semibold">{{ $u->name ?: '— belum diisi —' }}</span><span class="text-xs text-navy-500">{{ '@'.$u->username }}</span></span></span></td>
-                            <td class="px-3 py-3"><span class="block">{{ $u->nip ?: '–' }}</span><span class="text-xs text-navy-500">{{ $u->jabatan }}</span></td>
+                            <td class="px-3 py-3"><span class="block">{{ $u->nip ?: '–' }}</span>@if ($u->nip_lama)<span class="block text-xs text-navy-400">NIP lama {{ $u->nip_lama }}</span>@endif<span class="block text-xs text-navy-500">{{ $u->jabatan }}</span>@if ($u->pangkat_golongan)<span class="block text-xs text-navy-400">{{ $u->pangkat_golongan }}</span>@endif</td>
                             <td class="px-3 py-3">
                                 <div class="flex flex-wrap gap-1">
                                     @if ($u->is_admin)<span class="chip bg-navy-900 text-white ring-navy-900">Admin</span>@endif
@@ -98,9 +98,13 @@
                     <div><label class="label">Username</label><input wire:model="form.username" class="input @error('form.username') input-error @enderror" autocapitalize="none">@error('form.username')<p class="error">{{ $message }}</p>@enderror</div>
                     <div><label class="label">{{ $editId ? 'Password baru (kosongkan bila tetap)' : 'Password awal' }}</label><input wire:model="form.password" class="input font-mono @error('form.password') input-error @enderror">@error('form.password')<p class="error">{{ $message }}</p>@enderror</div>
                     <div class="sm:col-span-2"><label class="label">Nama lengkap (dengan gelar)</label><input wire:model="form.name" class="input"></div>
-                    <div><label class="label">NIP</label><input wire:model="form.nip" class="input" inputmode="numeric"></div>
-                    <div><label class="label">Jabatan</label><input wire:model="form.jabatan" class="input" placeholder="mis. Statistisi Ahli Pertama"></div>
+                    <div><label class="label">NIP baru (18 digit)</label><input wire:model="form.nip" class="input @error('form.nip') input-error @enderror" inputmode="numeric">@error('form.nip')<p class="error">{{ $message }}</p>@enderror</div>
+                    <div><label class="label">NIP lama (9 digit)</label><input wire:model="form.nip_lama" class="input" inputmode="numeric"></div>
+                    <div class="sm:col-span-2"><label class="label">Jabatan</label><input wire:model="form.jabatan" class="input" placeholder="mis. Statistisi Ahli Pertama BPS Kabupaten/Kota"></div>
+                    <div><label class="label">Golongan akhir</label><input wire:model="form.golongan" class="input" placeholder="mis. III/a"></div>
+                    <div><label class="label">Pangkat</label><input wire:model="form.pangkat" class="input" placeholder="mis. Penata Muda"></div>
                     <div><label class="label">Email</label><input wire:model="form.email" type="email" class="input"></div>
+                    <div><label class="label">Nomor WhatsApp</label><input wire:model="form.phone" class="input" inputmode="tel" placeholder="62812…"></div>
                 </div>
 
                 <fieldset>
@@ -148,7 +152,7 @@
                 <li>Unduh template, isi di Excel.
                     <a href="{{ route('admin.template', $importType ?? 'akun') }}" class="font-semibold text-bps-blue-700 hover:underline">Unduh template {{ $importType }}</a></li>
                 @if ($importType === 'biodata')
-                    <li>Kolom: <b>username, nama, nip, jabatan</b>. Template sudah berisi semua username terdaftar.</li>
+                    <li>Kolom: <b>username, nama, nip_baru, nip_lama, jabatan, golongan, pangkat, nomor_wa</b>. Kolom yang kosong tidak mengubah data. Template sudah berisi semua username terdaftar.</li>
                 @else
                     <li>Kolom: <b>username, password</b>. Username yang sudah ada akan dilewati.</li>
                     <li>Semua akun baru wajib ganti password saat login pertama.</li>

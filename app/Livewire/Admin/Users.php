@@ -80,8 +80,8 @@ class Users extends Component
         $this->editId = null;
         $this->generatedPassword = null;
         $this->form = [
-            'username' => '', 'password' => Str::lower(Str::random(4)).random_int(1000, 9999), 'name' => '', 'nip' => '',
-            'jabatan' => '', 'email' => '', 'is_admin' => false, 'is_pimpinan' => false, 'is_pegawai' => true,
+            'username' => '', 'password' => Str::lower(Str::random(4)).random_int(1000, 9999), 'name' => '', 'nip' => '', 'nip_lama' => '',
+            'jabatan' => '', 'golongan' => '', 'pangkat' => '', 'email' => '', 'phone' => '', 'is_admin' => false, 'is_pimpinan' => false, 'is_pegawai' => true,
             'is_petugas_presensi' => false, 'is_keuangan' => false, 'is_active' => true,
         ];
         $this->formTeams = [];
@@ -94,7 +94,7 @@ class Users extends Component
         $u = User::with('teams')->findOrFail($id);
         $this->editId = $u->id;
         $this->generatedPassword = null;
-        $this->form = $u->only(['username', 'name', 'nip', 'jabatan', 'email', 'is_admin', 'is_pimpinan', 'is_pegawai', 'is_petugas_presensi', 'is_keuangan', 'is_active']) + ['password' => ''];
+        $this->form = $u->only(['username', 'name', 'nip', 'nip_lama', 'jabatan', 'golongan', 'pangkat', 'email', 'phone', 'is_admin', 'is_pimpinan', 'is_pegawai', 'is_petugas_presensi', 'is_keuangan', 'is_active']) + ['password' => ''];
         $this->formTeams = $u->teams->mapWithKeys(fn ($t) => [$t->id => $t->pivot->role])->all();
         $this->showForm = true;
     }
@@ -106,12 +106,16 @@ class Users extends Component
             'form.username' => ['required', 'string', 'max:100', Rule::unique('users', 'username')->ignore($this->editId)],
             'form.password' => [$this->editId ? 'nullable' : 'required', 'string', 'min:8'],
             'form.name' => 'nullable|string|max:150',
-            'form.nip' => 'nullable|string|max:30',
+            'form.nip' => ['nullable', 'string', 'max:30', Rule::unique('users', 'nip')->ignore($this->editId)],
+            'form.nip_lama' => 'nullable|string|max:20',
+            'form.golongan' => 'nullable|string|max:10',
+            'form.pangkat' => 'nullable|string|max:60',
+            'form.phone' => 'nullable|string|max:30',
             'form.jabatan' => 'nullable|string|max:150',
             'form.email' => 'nullable|email|max:150',
-        ], [], ['form.username' => 'username', 'form.password' => 'password']);
+        ], [], ['form.username' => 'username', 'form.password' => 'password', 'form.nip' => 'NIP baru']);
 
-        $data = collect($this->form)->only(['username', 'name', 'nip', 'jabatan', 'email', 'is_admin', 'is_pimpinan', 'is_pegawai', 'is_petugas_presensi', 'is_keuangan', 'is_active'])
+        $data = collect($this->form)->only(['username', 'name', 'nip', 'nip_lama', 'jabatan', 'golongan', 'pangkat', 'email', 'phone', 'is_admin', 'is_pimpinan', 'is_pegawai', 'is_petugas_presensi', 'is_keuangan', 'is_active'])
             ->map(fn ($v) => $v === '' ? null : $v)->all();
         foreach (['is_admin', 'is_pimpinan', 'is_pegawai', 'is_petugas_presensi', 'is_keuangan', 'is_active'] as $f) {
             $data[$f] = (bool) ($data[$f] ?? false);
@@ -218,7 +222,7 @@ class Users extends Component
     {
         $users = User::with('teams')
             ->when($this->search, fn ($q) => $q->where(fn ($w) => $w->where('username', 'like', "%{$this->search}%")
-                ->orWhere('name', 'like', "%{$this->search}%")->orWhere('nip', 'like', "%{$this->search}%")))
+                ->orWhere('name', 'like', "%{$this->search}%")->orWhere('nip', 'like', "%{$this->search}%")->orWhere('nip_lama', 'like', "%{$this->search}%")))
             ->when($this->role === 'admin', fn ($q) => $q->where('is_admin', true))
             ->when($this->role === 'pimpinan', fn ($q) => $q->where('is_pimpinan', true))
             ->when($this->role === 'ketua', fn ($q) => $q->whereHas('ledTeams'))

@@ -17,8 +17,10 @@
                 </div>
             </div>
             <dl class="divide-y divide-line border-t border-line text-sm">
-                <div class="flex px-5 py-3"><dt class="w-24 text-navy-500">NIP</dt><dd class="font-medium">{{ $user->nip ?: '–' }}</dd></div>
+                <div class="flex px-5 py-3"><dt class="w-24 shrink-0 text-navy-500">NIP</dt><dd class="font-medium">{{ $user->nip ?: '–' }}</dd></div>
+                @if ($user->nip_lama)<div class="flex px-5 py-3"><dt class="w-24 shrink-0 text-navy-500">NIP lama</dt><dd class="font-medium">{{ $user->nip_lama }}</dd></div>@endif
                 <div class="flex px-5 py-3"><dt class="w-24 shrink-0 text-navy-500">Jabatan</dt><dd class="font-medium">{{ $user->jabatan ?: '–' }}</dd></div>
+                <div class="flex px-5 py-3"><dt class="w-24 shrink-0 text-navy-500">Pangkat</dt><dd class="font-medium">{{ $user->pangkat_golongan ?: '–' }}</dd></div>
                 <div class="flex px-5 py-3"><dt class="w-24 shrink-0 text-navy-500">Tim</dt>
                     <dd class="font-medium">@forelse ($user->teams as $t){{ $t->name }}{{ $t->pivot->role === 'ketua' ? ' (Ketua)' : '' }}@if(!$loop->last), @endif @empty – @endforelse</dd></div>
                 @if ($leave)<div class="flex px-5 py-3"><dt class="w-24 text-navy-500">Status</dt><dd class="font-medium text-amber-700">{{ $leave->type_label }} s.d. {{ tgl($leave->end_date) }}</dd></div>@endif
@@ -42,7 +44,7 @@
                     @endif
                 </div>
             @endif
-            <p class="border-t border-line px-5 py-3 text-xs text-navy-500">Nama, NIP, jabatan, dan tim diatur oleh admin.</p>
+            <p class="border-t border-line px-5 py-3 text-xs text-navy-500">Nama, NIP, jabatan, pangkat/golongan, dan tim diatur oleh admin.</p>
         </section>
 
         <div class="space-y-6">

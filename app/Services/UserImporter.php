@@ -18,6 +18,17 @@ class UserImporter
         return preg_replace('/[^a-z0-9._@-]/', '', $u);
     }
 
+    /** "0812-3456" / "+62 812…" → "628123456…". Kosong → null. */
+    public static function normalizePhone(string $raw): ?string
+    {
+        $d = preg_replace('/\D/', '', $raw);
+        if ($d === '') {
+            return null;
+        }
+
+        return str_starts_with($d, '0') ? '62'.substr($d, 1) : $d;
+    }
+
     /**
      * Import akun dari Excel kolom: username | password.
      * Akun yang sudah ada dilewati. Semua akun baru wajib ganti password saat login pertama.
@@ -60,7 +71,10 @@ class UserImporter
         return $res;
     }
 
-    /** Import biodata: username | nama | nip | jabatan  (baris dicocokkan via username, atau NIP bila username kosong). */
+    /**
+     * Import biodata: username | nama | nip_baru | nip_lama | jabatan | golongan | pangkat | nomor_wa
+     * (kolom "nip" lama tetap diterima sebagai NIP baru). Baris dicocokkan via username, atau NIP baru bila username kosong.
+     */
     public function importBiodata(string $path): array
     {
         $rows = Spreadsheet::read($path);
@@ -69,7 +83,7 @@ class UserImporter
         foreach ($rows as $i => $row) {
             $line = $i + 2;
             $username = self::normalizeUsername($row['username'] ?? '');
-            $nip = preg_replace('/\D/', '', (string) ($row['nip'] ?? ''));
+            $nip = preg_replace('/\D/', '', (string) ($row['nip_baru'] ?? $row['nip'] ?? ''));
 
             $user = $username !== ''
                 ? User::where('username', $username)->first()
@@ -84,7 +98,11 @@ class UserImporter
             $data = array_filter([
                 'name' => $row['nama'] ?? $row['name'] ?? null,
                 'nip' => $nip ?: null,
+                'nip_lama' => preg_replace('/\D/', '', (string) ($row['nip_lama'] ?? '')) ?: null,
                 'jabatan' => $row['jabatan'] ?? null,
+                'golongan' => $row['golongan_akhir'] ?? $row['golongan'] ?? null,
+                'pangkat' => $row['pangkat'] ?? null,
+                'phone' => self::normalizePhone((string) ($row['nomor_wa'] ?? $row['no_wa'] ?? '')),
             ], fn ($v) => $v !== null && $v !== '');
 
             if (! $data) {

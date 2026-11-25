@@ -20,9 +20,9 @@ class ExportController extends Controller
             ]);
         }
 
-        $rows = User::orderBy('username')->get()->map(fn ($u) => [$u->username, $u->name, $u->nip, $u->jabatan]);
+        $rows = User::orderBy('username')->get()->map(fn ($u) => [$u->username, $u->name, $u->nip, $u->nip_lama, $u->jabatan, $u->golongan, $u->pangkat, $u->phone]);
 
-        return Spreadsheet::download('template_import_biodata.xlsx', 'Biodata', ['username', 'nama', 'nip', 'jabatan'], $rows);
+        return Spreadsheet::download('template_import_biodata.xlsx', 'Biodata', ['username', 'nama', 'nip_baru', 'nip_lama', 'jabatan', 'golongan', 'pangkat', 'nomor_wa'], $rows);
     }
 
     /** Portofolio realisasi kerja (bahan KIPPAPP) – per bulan atau triwulan. */

@@ -77,7 +77,7 @@
                     <div class="rounded-[10px] bg-[#d8edf8] px-4 py-2.5 text-lg font-medium tabular-nums break-all text-[#0e3a57]" x-ref="nomor">{{ $h['nomor'] }}</div>
                     <button class="btn btn-blue" @click="navigator.clipboard.writeText($refs.nomor.innerText.trim()); salin = 'Tersalin'; setTimeout(() => salin = 'Salin nomor', 1800)">
                         <x-icon name="clip" class="size-4" /> <span x-text="salin"></span></button>
-                    <button wire:click="bukaUbah({{ $h['id'] }})" class="btn btn-ghost !text-bps-blue-700 ring-[1.5px] ring-bps-blue ring-inset"><x-icon name="pencil" class="size-4" /> Ubah isian</button>
+                    <button wire:click="bukaHapus({{ $h['id'] }})" class="btn btn-ghost !text-rose-700 ring-[1.5px] ring-rose-300 ring-inset hover:bg-rose-50"><x-icon name="trash" class="size-4" /> Hapus</button>
                     @if ($h['tautan'])
                         <button class="btn btn-ghost !text-bps-blue-700 ring-[1.5px] ring-bps-blue ring-inset" @click="navigator.clipboard.writeText(@js($h['tautan'])); tautan = 'Tersalin'; setTimeout(() => tautan = 'Salin tautan untuk pengunggah', 1800)">
                             <x-icon name="link" class="size-4" /> <span x-text="tautan"></span></button>
@@ -122,7 +122,9 @@
                                 @if ($s->lengkap)
                                     <button class="btn btn-sm bg-bps-blue-50 text-bps-blue-700 hover:bg-bps-blue-100" @click="navigator.clipboard.writeText(@js($s->nomor_surat)); s = 'Tersalin'; setTimeout(() => s = 'Salin', 1800)"><x-icon name="clip" class="size-3.5" /> <span x-text="s"></span></button>
                                 @endif
-                                <button wire:click="bukaUbah({{ $s->id }})" class="btn btn-sm bg-white text-bps-blue-700 ring-[1.5px] ring-bps-blue ring-inset hover:bg-bps-blue-50"><x-icon name="pencil" class="size-3.5" /> Ubah</button>
+                                @if ($bolehHapus($s))
+                                    <button wire:click="bukaHapus({{ $s->id }})" class="btn btn-sm bg-white text-rose-700 ring-[1.5px] ring-rose-300 ring-inset hover:bg-rose-50"><x-icon name="trash" class="size-3.5" /> Hapus</button>
+                                @endif
                             </div>
                         </li>
                     @endforeach
@@ -134,7 +136,7 @@
     {{-- ===================== RIWAYAT ===================== --}}
     @if ($tab === 'riwayat')
         <h1 class="text-2xl font-medium">Riwayat nomor</h1>
-        <p class="mb-5 text-navy-500">Cari nomor yang sudah terbit. Isian yang salah bisa diubah tanpa menghapus nomornya.</p>
+        <p class="mb-5 text-navy-500">Cari nomor yang sudah terbit. Nomor yang salah bisa dihapus oleh pembuatnya atau admin; nomor lain tidak berubah.</p>
         <section class="card mb-5 p-5 sm:p-6">
             <form wire:submit="cari" class="grid gap-x-5 gap-y-4 sm:grid-cols-3">
                 <div class="sm:col-span-3"><label class="label" for="r-kata">Kata kunci</label><input id="r-kata" type="search" wire:model="rKata" class="input" autocomplete="off" placeholder="Nomor, perihal, nama, atau kode"></div>
@@ -265,56 +267,25 @@
         </div>
     @endif
 
-    {{-- ===================== Modal: ubah data nomor ===================== --}}
-    @if ($uSurat)
-        @php $uc = Surat::cfg($uSurat->jenis); @endphp
-        <x-modal :show="true" close="tutupUbah" title="Ubah data nomor" width="max-w-[720px]">
-            <div class="mb-2 flex flex-col gap-0.5 rounded-[10px] bg-[#d8edf8] px-3.5 py-2.5 text-[#0e3a57]">
-                <span class="text-[13px]">{{ $uc['judul'] }}</span>
-                <span class="text-[17px] font-medium tabular-nums break-all">{{ $uSurat->nomorTampil() }}</span>
+    {{-- ===================== Modal: hapus nomor ===================== --}}
+    @if ($hSurat)
+        <x-modal :show="true" close="tutupHapus" title="Hapus nomor" width="max-w-[560px]">
+            <div class="mb-3 flex flex-col gap-0.5 rounded-[10px] bg-rose-50 px-3.5 py-2.5 text-rose-900">
+                <span class="text-[13px]">{{ Surat::labelJenis($hSurat->jenis) }} · {{ $tgl($hSurat->tanggal) }}</span>
+                <span class="text-[17px] font-medium tabular-nums break-all">{{ $hSurat->nomorTampil() }}</span>
+                @if ($hSurat->perihal)<span class="text-sm">{{ $hSurat->perihal }}</span>@endif
             </div>
-            <p class="mb-4 text-sm text-navy-500">Nomor urut tidak berubah dan datanya tidak dihapus. Setiap perubahan tercatat di log perubahan.</p>
-            <div class="grid gap-x-5 gap-y-4 sm:grid-cols-2">
-                @foreach ($uc['form'] as $f)
-                    @include('livewire.portal.partials.sicatur-bidang', ['f' => $f, 'model' => 'uIsian', 'utama' => $uc['tanggal'] === $f['attr'], 'mode' => 'ubah',
-                        'batas' => $uBatas, 'terkunci' => in_array($f['attr'], $uc['kunciUbah'], true), 'nilai' => $uSurat->nilai($f['attr']), 'jenis' => $uSurat->jenis])
-                @endforeach
-            </div>
-            <div class="mt-5 grid gap-x-5 gap-y-4 border-t border-line pt-4 sm:grid-cols-2">
-                <div><p class="label">Diubah oleh</p><div class="rounded-xl bg-paper px-3.5 py-2.5 text-sm">{{ auth()->user()->name ?: auth()->user()->username }}</div></div>
-                <div><label class="label" for="u-alasan">Alasan (boleh dikosongkan)</label><input id="u-alasan" wire:model="uAlasan" maxlength="200" class="input" placeholder="Mis. salah pilih kode klasifikasi"></div>
-            </div>
-            @error('ubah')<p class="mt-3 rounded-[10px] bg-rose-50 px-3 py-2.5 text-sm text-rose-700">{{ $message }}</p>@enderror
-            @if ($uKonfirmasi)
-                <div class="mt-3.5 rounded-[10px] border border-[#f0d49b] bg-[#fff7e6] px-4 py-3.5">
-                    <strong>Nomor akan berubah</strong>
-                    <div class="my-2 grid grid-cols-[4.5rem_1fr] gap-x-2.5 gap-y-1 text-sm">
-                        <span class="text-navy-500">Dari</span><span class="font-medium break-all tabular-nums">{{ $uKonfirmasi['lama'] ?: '(belum tersusun)' }}</span>
-                        <span class="text-navy-500">Menjadi</span><span class="font-medium break-all tabular-nums">{{ $uKonfirmasi['baru'] }}</span>
-                    </div>
-                    <p class="text-[13px] text-navy-500">Pastikan surat belum dicetak atau dikirim dengan nomor lama.</p>
-                    <div class="mt-2.5 flex justify-end gap-2">
-                        <button wire:click="$set('uKonfirmasi', null)" class="btn btn-ghost">Kembali</button>
-                        <button wire:click="simpanUbah(true)" class="btn btn-blue">Ya, ubah nomor</button>
-                    </div>
-                </div>
-            @endif
-            @if ($uSurat->logs->isNotEmpty())
-                <details class="mt-4 text-sm">
-                    <summary class="cursor-pointer font-medium text-bps-blue-700">Riwayat perubahan ({{ $uSurat->logs->count() }})</summary>
-                    <ul class="mt-2 space-y-1.5">
-                        @foreach ($uSurat->logs as $lg)
-                            <li class="rounded-lg bg-paper px-3 py-2"><b>{{ $lg->kolom }}</b>: <span class="text-navy-500 line-through">{{ $lg->nilai_lama ?: '–' }}</span> → {{ $lg->nilai_baru ?: '–' }}
-                                <span class="block text-xs text-navy-500">{{ $lg->created_at->translatedFormat('j M Y H:i') }} · {{ $lg->oleh }}{{ $lg->alasan ? ' · '.$lg->alasan : '' }}</span></li>
-                        @endforeach
-                    </ul>
-                </details>
-            @endif
+            <ul class="mb-4 list-disc space-y-1 pl-5 text-sm text-navy-600">
+                <li>Nomor lain <b>tidak berubah</b> dan tidak bergeser.</li>
+                <li>Nomor ini <b>tidak akan dipakai lagi</b>, supaya tidak ada surat dengan nomor kembar.</li>
+                <li>Penghapusan tercatat di log beserta alasannya.</li>
+            </ul>
+            <label class="label" for="h-alasan">Alasan penghapusan</label>
+            <input id="h-alasan" wire:model="hAlasan" maxlength="200" class="input @error('hAlasan') input-error @enderror" placeholder="Mis. surat batal dibuat / salah pilih jenis surat" autofocus>
+            @error('hAlasan')<p class="error">{{ $message }}</p>@enderror
             <x-slot:footer>
-                @unless ($uKonfirmasi)
-                    <button wire:click="tutupUbah" class="btn btn-ghost">Batal</button>
-                    <button wire:click="simpanUbah" class="btn btn-blue" wire:loading.attr="disabled">Simpan perubahan</button>
-                @endunless
+                <button wire:click="tutupHapus" class="btn btn-ghost">Batal</button>
+                <button wire:click="hapus" class="btn bg-rose-600 text-white hover:bg-rose-700" wire:loading.attr="disabled" wire:target="hapus"><x-icon name="trash" class="size-4" /> Hapus nomor</button>
             </x-slot:footer>
         </x-modal>
     @endif

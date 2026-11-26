@@ -5,10 +5,11 @@
 |
 | form   : isian sesuai urutan di layar. kolom = label (nama kolom di spreadsheet lama), attr = kolom database.
 |          tipe: klasifikasi | tanggal | pembuat | pilihan | deskripsi | tautan
-| tanggal: kolom tanggal utama (dasar nomor & urutan). FP memakai tanggal terbit (hari ini) sebagai Tanggal Surat.
-| kunciUbah : isian yang tidak boleh diubah setelah nomor terbit (nomor urut dihitung menurutnya)
-| urutan : nomor urut mulai ulang per 'tahun', atau per 'bulan' + kolom (Form Permintaan: per bulan per tim teknis)
+| tanggal: kolom tanggal utama (dasar nomor, urutan, & sisipan). Semua jenis bisa tanggal mundur / nomor sisipan.
+| urutan : nomor urut mulai ulang per 'tahun', atau per 'bulan_tim' (Form Permintaan: per bulan Tanggal FP per tim teknis)
 | digit  : 3 → 001 · 0 → 1
+| awalan : awalan nomor berita acara / pernyataan (BAST-001/…)
+| sheet  : nama sheet di spreadsheet SICATUR lama untuk impor (null = tidak diimpor)
 */
 
 $timTeknis = [
@@ -40,7 +41,7 @@ return [
 
     'sifat' => ['Biasa' => 'B-', 'Terbatas' => 'T-', 'Rahasia' => 'R-'],
     'tim_teknis' => $timTeknis,
-    'jenis_fp' => $jenisFp,
+    'jenis_fp' => $jenisFp,   // tidak lagi diisi di form; hanya untuk data lama
 
     // Alur Link Surat (SK): status Proses saat nomor terbit, Selesai saat link surat diisi
     'lengkapi' => ['jenis' => 'sk', 'label' => 'Link Surat', 'proses' => 'Proses', 'selesai' => 'Selesai'],
@@ -58,7 +59,6 @@ return [
                 ['kolom' => 'Perihal', 'tipe' => 'deskripsi', 'attr' => 'perihal'],
             ],
             'tanggal' => 'tanggal',
-            'kunciUbah' => [],
             'urutan' => 'tahun',
             'digit' => 3,
         ],
@@ -68,13 +68,11 @@ return [
             'sheet' => 'Form Permintaan',
             'form' => [
                 ['kolom' => 'Tim Teknis', 'tipe' => 'pilihan', 'attr' => 'tim_teknis', 'opsi' => array_keys($timTeknis)],
-                ['kolom' => 'Jenis FP', 'tipe' => 'pilihan', 'attr' => 'jenis_fp', 'opsi' => array_keys($jenisFp)],
                 ['kolom' => 'Tanggal FP', 'tipe' => 'tanggal', 'attr' => 'tanggal_fp'],
                 ['kolom' => 'Pembuat FP', 'tipe' => 'pembuat', 'attr' => 'pembuat'],
                 ['kolom' => 'Perihal', 'tipe' => 'deskripsi', 'attr' => 'perihal'],
             ],
-            'tanggal' => null,      // Tanggal Surat = tanggal terbit (hari ini)
-            'kunciUbah' => ['tim_teknis'],
+            'tanggal' => 'tanggal_fp',
             'urutan' => 'bulan_tim',
             'digit' => 3,
         ],
@@ -92,7 +90,6 @@ return [
                 ['kolom' => 'Selesai Berlaku', 'tipe' => 'tanggal', 'attr' => 'tanggal_selesai'],
             ],
             'tanggal' => 'tanggal',
-            'kunciUbah' => [],
             'urutan' => 'tahun',
             'digit' => 0,
         ],
@@ -100,6 +97,7 @@ return [
             'label' => 'BAST',
             'judul' => 'Berita Acara Serah Terima (BAST)',
             'sheet' => 'BAST',
+            'awalan' => 'BAST',
             'form' => [
                 ['kolom' => 'Kode Klasifikasi', 'tipe' => 'klasifikasi', 'attr' => 'klasifikasi'],
                 ['kolom' => 'Tanggal BAST', 'tipe' => 'tanggal', 'attr' => 'tanggal'],
@@ -107,7 +105,6 @@ return [
                 ['kolom' => 'Perihal', 'tipe' => 'deskripsi', 'attr' => 'perihal'],
             ],
             'tanggal' => 'tanggal',
-            'kunciUbah' => [],
             'urutan' => 'tahun',
             'digit' => 3,
         ],
@@ -115,6 +112,7 @@ return [
             'label' => 'BAPP',
             'judul' => 'Berita Acara Penyelesaian Pekerjaan (BAPP)',
             'sheet' => 'BAPP',
+            'awalan' => 'BAPP',
             'form' => [
                 ['kolom' => 'Kode Klasifikasi', 'tipe' => 'klasifikasi', 'attr' => 'klasifikasi'],
                 ['kolom' => 'Tanggal BAPP', 'tipe' => 'tanggal', 'attr' => 'tanggal'],
@@ -122,7 +120,6 @@ return [
                 ['kolom' => 'Perihal', 'tipe' => 'deskripsi', 'attr' => 'perihal'],
             ],
             'tanggal' => 'tanggal',
-            'kunciUbah' => [],
             'urutan' => 'tahun',
             'digit' => 3,
         ],
@@ -130,6 +127,7 @@ return [
             'label' => 'BA',
             'judul' => 'Berita Acara (BA)',
             'sheet' => 'BA',
+            'awalan' => 'BA',
             'form' => [
                 ['kolom' => 'Kode Klasifikasi', 'tipe' => 'klasifikasi', 'attr' => 'klasifikasi'],
                 ['kolom' => 'Tanggal BA', 'tipe' => 'tanggal', 'attr' => 'tanggal'],
@@ -137,7 +135,21 @@ return [
                 ['kolom' => 'Perihal', 'tipe' => 'deskripsi', 'attr' => 'perihal'],
             ],
             'tanggal' => 'tanggal',
-            'kunciUbah' => [],
+            'urutan' => 'tahun',
+            'digit' => 3,
+        ],
+        'sp' => [
+            'label' => 'Surat Pernyataan',
+            'judul' => 'Surat Pernyataan',
+            'sheet' => null,
+            'awalan' => 'SP',
+            'form' => [
+                ['kolom' => 'Kode Klasifikasi', 'tipe' => 'klasifikasi', 'attr' => 'klasifikasi'],
+                ['kolom' => 'Tanggal Surat Pernyataan', 'tipe' => 'tanggal', 'attr' => 'tanggal'],
+                ['kolom' => 'Pembuat Surat Pernyataan', 'tipe' => 'pembuat', 'attr' => 'pembuat'],
+                ['kolom' => 'Perihal', 'tipe' => 'deskripsi', 'attr' => 'perihal'],
+            ],
+            'tanggal' => 'tanggal',
             'urutan' => 'tahun',
             'digit' => 3,
         ],

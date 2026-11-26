@@ -65,6 +65,7 @@ Route::middleware(['auth', 'account'])->group(function () {
         Route::get('/sicatur/export', [SuratController::class, 'export'])->name('sicatur.export');
         Route::get('/sicatur/pedoman', [SuratController::class, 'pedoman'])->name('sicatur.pedoman');
         Route::get('/sicatur/klasifikasi', [SuratController::class, 'klasifikasi'])->name('sicatur.klasifikasi');
+        Route::get('/sicatur/format-petugas', [SuratController::class, 'formatPetugas'])->name('sicatur.format-petugas');
         Route::get('/siku', Livewire\Portal\Siku::class)->name('siku');
         Route::get('/kepegawaian', Livewire\Portal\Kepegawaian::class)->name('kepegawaian');
     });

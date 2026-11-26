@@ -55,11 +55,9 @@ class Sicatur extends Component
     public ?int $lId = null;
     public string $linkBaru = '';
 
-    // ---- Ubah ----
-    public ?int $uId = null;
-    public array $uIsian = [];
-    public string $uAlasan = '';
-    public ?array $uKonfirmasi = null;
+    // ---- Hapus ----
+    public ?int $hId = null;
+    public string $hAlasan = '';
 
     // ---- Pengaturan (admin) ----
     public $imporFile;
@@ -193,59 +191,40 @@ class Sicatur extends Component
     }
 
     // =====================================================================
-    // Ubah data nomor
+    // Hapus nomor (nomor lain tidak berubah, nomor yang dihapus tidak dipakai lagi)
     // =====================================================================
 
-    public function bukaUbah(int $id): void
+    public function bukaHapus(int $id, SicaturService $svc): void
     {
         $s = Surat::findOrFail($id);
-        abort_unless(Surat::cfg($s->jenis), 404);
-        $this->uId = $s->id;
-        $this->uIsian = [];
-        foreach (Surat::cfg($s->jenis)['form'] as $f) {
-            $this->uIsian[$f['attr']] = $s->nilai($f['attr']);
-        }
-        $this->uAlasan = '';
-        $this->uKonfirmasi = null;
-        $this->resetErrorBag();
-    }
-
-    public function tutupUbah(): void
-    {
-        $this->reset(['uId', 'uIsian', 'uAlasan', 'uKonfirmasi']);
-        $this->resetErrorBag();
-    }
-
-    public function updatedUIsian(): void
-    {
-        $this->uKonfirmasi = null;
-    }
-
-    public function simpanUbah(SicaturService $svc, bool $konfirmasi = false): void
-    {
-        $s = Surat::findOrFail($this->uId);
-        $baru = $this->uIsian;
-        unset($baru['pembuat']); // pembuat mengikuti akun yang menerbitkan, tidak diubah
-        try {
-            $h = $svc->ubah($s, $baru, trim($this->uAlasan) ?: null, Auth::user(), $konfirmasi);
-        } catch (ValidationException $e) {
-            $pesan = collect($e->errors())->flatten()->implode(' ');
-            $this->addError('ubah', $pesan);
+        if (! $svc->bolehHapus($s, Auth::user())) {
+            $this->toast('Hanya pembuat nomor atau admin yang bisa menghapus nomor ini.', 'error');
 
             return;
         }
-        if (! empty($h['perluKonfirmasi'])) {
-            $this->uKonfirmasi = ['lama' => $h['nomorLama'], 'baru' => $h['nomorBaru']];
+        $this->hId = $s->id;
+        $this->hAlasan = '';
+        $this->resetErrorBag('hAlasan');
+    }
 
-            return;
-        }
-        $this->tutupUbah();
+    public function tutupHapus(): void
+    {
+        $this->reset(['hId', 'hAlasan']);
+        $this->resetErrorBag('hAlasan');
+    }
+
+    public function hapus(SicaturService $svc): void
+    {
+        $s = Surat::findOrFail($this->hId);
+        $nomor = $s->nomorTampil();
+        $svc->hapus($s, $this->hAlasan, Auth::user());
         foreach ($this->hasil as $j => $x) {
             if ($x['id'] === $s->id) {
-                $this->hasil[$j]['nomor'] = $h['nomorBaru'];
+                unset($this->hasil[$j]);
             }
         }
-        $this->toast('Perubahan tersimpan'.($h['berubahNomor'] ? '. Nomor sekarang '.$h['nomorBaru'] : '').'.');
+        $this->tutupHapus();
+        $this->toast('Nomor '.$nomor.' dihapus. Nomor lain tidak berubah.');
     }
 
     // =====================================================================
@@ -280,7 +259,7 @@ class Sicatur extends Component
             $q->where(fn ($x) => $x->where('nomor_surat', 'like', "%{$w}%")->orWhere('no_urut', 'like', "%{$w}%")
                 ->orWhere('perihal', 'like', "%{$w}%")->orWhere('tujuan', 'like', "%{$w}%")
                 ->orWhere('pembuat', 'like', "%{$w}%")->orWhere('klasifikasi', 'like', "%{$w}%")
-                ->orWhere('tim_teknis', 'like', "%{$w}%")->orWhere('jenis_fp', 'like', "%{$w}%")
+                ->orWhere('tim_teknis', 'like', "%{$w}%")
                 ->orWhere('nama_petugas', 'like', "%{$w}%")->orWhere('honor', 'like', "%{$w}%")
                 ->orWhere('pihak', 'like', "%{$w}%"));
         }
@@ -457,8 +436,8 @@ class Sicatur extends Component
                 ->paginate(config('sicatur.per_halaman'), ['*'], 'lh');
         }
 
-        $data['uSurat'] = $this->uId ? Surat::find($this->uId) : null;
-        $data['uBatas'] = $data['uSurat'] ? $svc->batasTanggal($data['uSurat']) : null;
+        $data['hSurat'] = $this->hId ? Surat::find($this->hId) : null;
+        $data['bolehHapus'] = fn (Surat $s) => $svc->bolehHapus($s, Auth::user());
         $data['lSurat'] = $this->lId ? Surat::find($this->lId) : null;
 
         return view('livewire.portal.sicatur', $data);

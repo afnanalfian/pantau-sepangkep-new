@@ -8,8 +8,8 @@
         @if ($s->lengkap && $s->nomor_surat)
             <button class="btn btn-sm bg-bps-blue-50 text-bps-blue-700 hover:bg-bps-blue-100" @click="navigator.clipboard.writeText(@js($s->nomor_surat)); t = 'Tersalin'; setTimeout(() => t = 'Salin', 1800)"><x-icon name="clip" class="size-3.5" /> <span x-text="t"></span></button>
         @endif
-        @if (\App\Models\Surat::cfg($s->jenis))
-            <button wire:click="bukaUbah({{ $s->id }})" class="btn btn-sm bg-white text-bps-blue-700 ring-[1.5px] ring-bps-blue ring-inset hover:bg-bps-blue-50"><x-icon name="pencil" class="size-3.5" /> Ubah</button>
+        @if (\App\Models\Surat::cfg($s->jenis) && $bolehHapus($s))
+            <button wire:click="bukaHapus({{ $s->id }})" class="btn btn-sm bg-white text-rose-700 ring-[1.5px] ring-rose-300 ring-inset hover:bg-rose-50"><x-icon name="trash" class="size-3.5" /> Hapus</button>
         @endif
     </div>
     <div class="text-sm text-navy-500">{{ collect([$s->tanggal?->translatedFormat('j M Y'), $s->pembuat])->filter()->implode(' · ') }}</div>

@@ -79,6 +79,11 @@
             @case('tautan')
                 <input id="{{ $id }}" type="text" inputmode="url" autocomplete="off" spellcheck="false" maxlength="500" wire:model.live.debounce.400ms="{{ $wm }}" class="input" placeholder="https://drive.google.com/...">
                 <p class="hint">Tempel tautan (link), bukan nama.</p>
+                @if ($f['attr'] === 'nama_petugas')
+                    <a href="{{ route('portal.sicatur.format-petugas') }}" class="mt-1.5 inline-flex items-center gap-1.5 text-sm font-semibold text-bps-blue-700 hover:underline">
+                        <x-icon name="download" class="size-4" /> Unduh format Excel daftar petugas (Nama, Jabatan)</a>
+                    <p class="hint">Isi format itu, unggah ke Google Drive, lalu tempel tautannya di sini.</p>
+                @endif
                 @php $v = trim((string) data_get($this, $wm)); @endphp
                 @if ($v !== '' && ! preg_match(\App\Services\SicaturService::POLA_TAUTAN, $v))
                     <p class="error">Harus berupa tautan yang diawali http:// atau https:// tanpa spasi.</p>

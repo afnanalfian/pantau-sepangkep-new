@@ -16,11 +16,11 @@ use Illuminate\Validation\ValidationException;
 
 /**
  * Logika penomoran SICATUR, mengikuti aplikasi Apps Script lama (Config.gs, Nomor.gs, Web.gs):
- *  - Nomor urut per kelompok: tahun tanggal surat; Form Permintaan: bulan terbit + tim teknis.
+ *  - Nomor urut per kelompok: tahun tanggal surat; Form Permintaan: bulan Tanggal FP + tim teknis.
  *  - Tanggal tidak boleh setelah hari ini. Tanggal sebelum hari ini wajib dicentang "Tanggal mundur";
- *    bila sudah ada nomor yang lebih baru, nomor menjadi sisipan (mis. 010.1).
- *  - Perubahan isian tidak mengubah nomor urut; perubahan yang mengubah Format Nomor wajib dikonfirmasi.
- *  - Setiap perubahan tercatat di log.
+ *    bila sudah ada nomor yang lebih baru, nomor menjadi sisipan (mis. 010.1). Berlaku untuk semua jenis.
+ *  - Nomor yang dihapus tidak dipakai ulang, sehingga nomor lain tidak bergeser.
+ *  - Setiap penghapusan & link surat tercatat di log.
  */
 class SicaturService
 {
@@ -83,11 +83,13 @@ class SicaturService
             case 'bast':
             case 'bapp':
             case 'ba':
+            case 'sp':
                 if (empty($d['klasifikasi'])) {
                     return null;
                 }
+                $awalan = $this->cfg($jenis)['awalan'] ?? strtoupper($jenis);
 
-                return strtoupper($jenis).'-'.$noUrut.'/'.$satker.'/'.$d['klasifikasi'].'/'.$tahun;
+                return $awalan.'-'.$noUrut.'/'.$satker.'/'.$d['klasifikasi'].'/'.$tahun;
             case 'st':
                 $awalan = config('sicatur.sifat')[$d['sifat'] ?? 'Biasa'] ?? null;
                 if (! $awalan || empty($d['klasifikasi'])) {
@@ -98,13 +100,13 @@ class SicaturService
             case 'sk':
                 return 'NOMOR '.$noUrut.' TAHUN '.$tahun;
             case 'fp':
-                $ku = config('sicatur.jenis_fp')[$d['jenis_fp'] ?? ''] ?? null;
+                // Tanpa Jenis FP: No Urut/Satker/Tim Teknis/Bulan FP/Tahun FP
                 $tim = config('sicatur.tim_teknis')[$d['tim_teknis'] ?? ''] ?? null;
-                if (! $ku || ! $tim) {
+                if (! $tim) {
                     return null;
                 }
 
-                return $noUrut.'/'.$satker.'/'.$ku.'/'.$tim.'/'.$tanggal->format('m').'/'.$tahun;
+                return $noUrut.'/'.$satker.'/'.$tim.'/'.$tanggal->format('m').'/'.$tahun;
         }
 
         return null;
@@ -204,7 +206,7 @@ class SicaturService
         $d = $this->bersih($c, $isian);
         $hariIni = $this->hariIni();
 
-        // Tanggal utama (dasar nomor). FP: tanggal terbit.
+        // Tanggal utama (dasar nomor & sisipan). FP: Tanggal FP.
         $tanggal = $c['tanggal'] ? $d[$c['tanggal']] : $hariIni;
         $kunciTgl = 'isian.'.$jenis.'.'.($c['tanggal'] ?? 'tanggal');
         if ($tanggal > $hariIni) {
@@ -323,94 +325,30 @@ class SicaturService
     }
 
     // =====================================================================
-    // Ubah
+    // Hapus
     // =====================================================================
 
-    /** Batas tanggal utama saat diubah: di antara nomor sebelum & sesudahnya, dalam kelompok yang sama, ≤ hari ini. */
-    public function batasTanggal(Surat $s): ?array
+    public function bolehHapus(Surat $s, User $user): bool
     {
-        $c = $this->cfg($s->jenis);
-        if (! $c['tanggal']) {
-            return null;
-        }
-        $semua = Surat::withTrashed()->where('jenis', $s->jenis)->where('grup', $s->grup)
-            ->orderBy('nomor_urut')->orderBy('sisip')->get(['id', 'tanggal']);
-        $i = $semua->search(fn ($x) => $x->id === $s->id);
-        $min = $s->tanggal->copy()->startOfYear();
-        $max = $s->tanggal->copy()->endOfYear();
-        if ($i !== false && $i > 0) {
-            $min = $semua[$i - 1]->tanggal->copy()->max($min);
-        }
-        if ($i !== false && $i < $semua->count() - 1) {
-            $max = $semua[$i + 1]->tanggal->copy()->min($max);
-        }
-        $max = $max->min(now()->startOfDay());
-
-        return ['min' => $min->toDateString(), 'max' => $max->toDateString()];
+        return $user->is_admin || ($s->user_id && $s->user_id === $user->id);
     }
 
     /**
-     * @return array{perluKonfirmasi?: bool, nomorLama?: string, nomorBaru?: string, berubahNomor?: bool, berubah?: int}
+     * Hapus sebuah nomor (soft delete). Nomor lain tidak berubah, dan nomor yang dihapus
+     * tidak dipakai lagi (penomoran menghitung baris terhapus), jadi tidak ada nomor kembar.
      */
-    public function ubah(Surat $s, array $baru, ?string $alasan, User $user, bool $konfirmasi): array
+    public function hapus(Surat $s, string $alasan, User $user): void
     {
-        $c = $this->cfg($s->jenis);
-        $berubah = [];
-        foreach ($c['form'] as $f) {
-            $a = $f['attr'];
-            if (in_array($a, $c['kunciUbah'], true) || ! array_key_exists($a, $baru)) {
-                continue;
-            }
-            $v = $f['tipe'] === 'deskripsi' ? trim(preg_replace('/\s+/', ' ', (string) $baru[$a])) : trim((string) $baru[$a]);
-            if ($v !== $s->nilai($a)) {
-                $berubah[$a] = $v;
-            }
+        abort_unless($this->bolehHapus($s, $user), 403, 'Hanya pembuat nomor atau admin yang bisa menghapus.');
+        $alasan = trim(preg_replace('/\s+/', ' ', $alasan));
+        if (mb_strlen($alasan) < 3) {
+            throw ValidationException::withMessages(['hAlasan' => 'Tulis alasan penghapusan.']);
         }
-        if (! $berubah) {
-            throw ValidationException::withMessages(['ubah' => 'Tidak ada isian yang berubah.']);
-        }
-
-        $isianLengkap = [];
-        foreach ($c['form'] as $f) {
-            $isianLengkap[$f['attr']] = $berubah[$f['attr']] ?? $s->nilai($f['attr']);
-        }
-        $this->periksa($s->jenis, $isianLengkap, array_keys($berubah));
-
-        if ($c['tanggal'] && isset($berubah[$c['tanggal']])) {
-            $b = $this->batasTanggal($s);
-            $v = $berubah[$c['tanggal']];
-            if ($v < $b['min'] || $v > $b['max']) {
-                throw ValidationException::withMessages(['isian.ubah.'.$c['tanggal'] => 'Tanggal di luar batas ('.$b['min'].' s.d. '.$b['max'].').']);
-            }
-        }
-
-        $data = $isianLengkap + ['tanggal' => $c['tanggal'] ? $isianLengkap[$c['tanggal']] : $s->tanggal->toDateString(), 'sifat' => $s->sifat ?: 'Biasa'];
-        $noUrut = $s->no_urut ?: $this->noUrutTeks($c, $s->nomor_urut, $s->sisip);
-        $nomorBaru = $this->formatNomor($s->jenis, $noUrut, $data) ?? $s->nomor_surat;
-        $nomorLama = $s->lengkap ? $s->nomor_surat : '';
-        $gantiNomor = $nomorBaru !== $nomorLama;
-        if ($gantiNomor && ! $konfirmasi) {
-            return ['perluKonfirmasi' => true, 'nomorLama' => $nomorLama, 'nomorBaru' => $nomorBaru];
-        }
-
-        $oleh = $user->name ?: $user->username;
-        DB::transaction(function () use ($s, $c, $berubah, $gantiNomor, $nomorLama, $nomorBaru, $alasan, $user, $oleh) {
-            $label = collect($c['form'])->pluck('kolom', 'attr');
-            foreach ($berubah as $a => $v) {
-                SuratLog::create(['surat_id' => $s->id, 'kolom' => $label[$a], 'nilai_lama' => $s->nilai($a), 'nilai_baru' => $v,
-                    'user_id' => $user->id, 'oleh' => $oleh, 'alasan' => $alasan ?: null]);
-                $s->{$a} = $v !== '' ? $v : null;
-            }
-            if ($gantiNomor) {
-                SuratLog::create(['surat_id' => $s->id, 'kolom' => 'Format Nomor', 'nilai_lama' => $nomorLama, 'nilai_baru' => $nomorBaru,
-                    'user_id' => $user->id, 'oleh' => $oleh, 'alasan' => $alasan ?: null]);
-                $s->nomor_surat = $nomorBaru;
-                $s->lengkap = true;
-            }
-            $s->save();
+        DB::transaction(function () use ($s, $alasan, $user) {
+            SuratLog::create(['surat_id' => $s->id, 'kolom' => 'Dihapus', 'nilai_lama' => $s->nomorTampil(), 'nilai_baru' => null,
+                'user_id' => $user->id, 'oleh' => $user->name ?: $user->username, 'alasan' => mb_substr($alasan, 0, 200)]);
+            $s->delete();
         });
-
-        return ['berubahNomor' => $gantiNomor, 'nomorBaru' => $nomorBaru, 'berubah' => count($berubah)];
     }
 
     // =====================================================================

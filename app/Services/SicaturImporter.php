@@ -50,6 +50,9 @@ class SicaturImporter
             }
 
             foreach (config('sicatur.jenis') as $jenis => $c) {
+                if (empty($c['sheet'])) {
+                    continue; // jenis baru, tidak ada di spreadsheet lama
+                }
                 $ws = $this->sheet($buku, $c['sheet']);
                 if (! $ws) {
                     $hasil['sheetHilang'][] = $c['sheet'];
@@ -234,9 +237,11 @@ class SicaturImporter
                 };
             }
 
-            // Tanggal dasar nomor: kolom tanggal utama, atau Tanggal Surat (FP)
-            $tanggal = $c['tanggal'] ? ($d[$c['tanggal']] ?? null) : ($kolTglSurat ? $this->tanggal($this->nilai($ws, $kolTglSurat, $r)) : null);
-            $tanggal ??= $d['tanggal_fp'] ?? null;
+            // Tanggal yang ditampilkan: kolom tanggal utama (FP: Tanggal FP).
+            // Kelompok nomor FP lama mengikuti Tanggal Surat (tanggal terbit) di spreadsheet lama.
+            $tglSurat = $kolTglSurat ? $this->tanggal($this->nilai($ws, $kolTglSurat, $r)) : null;
+            $tanggal = ($c['tanggal'] ? ($d[$c['tanggal']] ?? null) : null) ?? $tglSurat;
+            $tglGrup = $jenis === 'fp' ? ($tglSurat ?? $tanggal) : $tanggal;
             if (! $tanggal) {
                 $lewat++;
 
@@ -256,8 +261,11 @@ class SicaturImporter
             }
             $isi['pembuat'] = ($isi['pembuat'] ?? null) ?: 'Tidak tercatat';
             $isi['perihal'] = ($isi['perihal'] ?? null) ?: '-';
+            if ($jenis === 'fp' && $kolDari('Jenis FP')) {
+                $isi['jenis_fp'] = $this->teks($this->nilai($ws, $kolDari('Jenis FP'), $r)) ?: null; // data lama
+            }
 
-            $grup = $this->svc->grup($jenis, $tanggal, $isi['tim_teknis'] ?? null);
+            $grup = $this->svc->grup($jenis, $tglGrup, $isi['tim_teknis'] ?? null);
             Surat::withTrashed()->updateOrCreate(
                 ['jenis' => $jenis, 'grup' => $grup, 'nomor_urut' => $nomor, 'sisip' => $sisip],
                 $isi + [

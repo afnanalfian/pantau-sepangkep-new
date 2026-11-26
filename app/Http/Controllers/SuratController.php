@@ -43,6 +43,51 @@ class SuratController extends Controller
         return response()->json($data)->header('Cache-Control', 'no-store, max-age=0');
     }
 
+    /** Format Excel daftar petugas SK: No | Nama | Jabatan (+ sheet daftar pegawai sebagai rujukan). */
+    public function formatPetugas()
+    {
+        $book = new \PhpOffice\PhpSpreadsheet\Spreadsheet;
+        $ws = $book->getActiveSheet()->setTitle('Daftar Petugas');
+        $ws->setCellValue('A1', 'DAFTAR PETUGAS');
+        $ws->setCellValue('A2', 'Lampiran SK: ……………………………………');
+        $ws->mergeCells('A1:C1');
+        $ws->mergeCells('A2:C2');
+        $ws->getStyle('A1')->getFont()->setBold(true)->setSize(13);
+        $ws->fromArray(['No', 'Nama', 'Jabatan'], null, 'A4');
+        $baris = 50;
+        for ($i = 1; $i <= $baris; $i++) {
+            $ws->setCellValue('A'.(4 + $i), $i);
+        }
+        $akhir = 4 + $baris;
+        $ws->getStyle('A4:C4')->applyFromArray([
+            'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+            'fill' => ['fillType' => 'solid', 'startColor' => ['rgb' => '0B6FB3']],
+            'alignment' => ['horizontal' => 'center', 'vertical' => 'center'],
+        ]);
+        $ws->getStyle("A4:C{$akhir}")->getBorders()->getAllBorders()->setBorderStyle('thin');
+        $ws->getStyle("A5:A{$akhir}")->getAlignment()->setHorizontal('center');
+        $ws->getColumnDimension('A')->setWidth(6);
+        $ws->getColumnDimension('B')->setWidth(42);
+        $ws->getColumnDimension('C')->setWidth(48);
+        $ws->freezePane('A5');
+
+        // Rujukan: nama & jabatan pegawai aktif (bisa disalin ke sheet Daftar Petugas)
+        $ref = $book->createSheet()->setTitle('Daftar Pegawai');
+        $ref->fromArray(['Nama', 'Jabatan'], null, 'A1');
+        $ref->getStyle('A1:B1')->getFont()->setBold(true);
+        $r = 2;
+        foreach (\App\Models\User::pegawai()->orderBy('name')->get(['name', 'username', 'jabatan']) as $u) {
+            $ref->fromArray([$u->name ?: $u->username, $u->jabatan], null, 'A'.$r++);
+        }
+        $ref->getColumnDimension('A')->setWidth(42);
+        $ref->getColumnDimension('B')->setWidth(55);
+        $book->setActiveSheetIndex(0);
+
+        return response()->streamDownload(function () use ($book) {
+            (new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($book))->save('php://output');
+        }, 'format_daftar_petugas_sk.xlsx', ['Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']);
+    }
+
     /** Ekspor hasil pencarian Riwayat. */
     public function export(Request $request)
     {

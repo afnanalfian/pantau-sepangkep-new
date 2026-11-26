@@ -36,7 +36,17 @@ class Show extends Component
             $sel[$b] = ['total' => $d['total'], 'rincian' => $d['rincian']] + $svc->status($d['total']);
         }
 
+        $pulsaBulan = [];
+        foreach ($this->mitra->pulsas()->beririsan($bulans[0], end($bulans))->get() as $p) {
+            foreach ($bulans as $b) {
+                if ($b >= $p->bulan_mulai && $b <= $p->bulan_selesai) {
+                    $pulsaBulan[$b] = $p;
+                }
+            }
+        }
+
         return view('livewire.sibeban.mitra.show', [
+            'pulsaBulan' => $pulsaBulan,
             'bulans' => $bulans,
             'sel' => $sel,
             'limit' => $svc->limit(),

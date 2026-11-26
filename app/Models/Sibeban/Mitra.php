@@ -22,6 +22,11 @@ class Mitra extends Model
         return trim(implode(', ', array_filter([$this->desa, $this->kecamatan ? 'Kec. '.$this->kecamatan : null])));
     }
 
+    public function pulsas(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
+    {
+        return $this->belongsToMany(Pulsa::class, 'sibeban_pulsa_petugas')->withTimestamps();
+    }
+
     public function honorBerjalans(): HasMany
     {
         return $this->hasMany(HonorBerjalan::class);

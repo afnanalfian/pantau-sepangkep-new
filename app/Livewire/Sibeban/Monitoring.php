@@ -139,8 +139,12 @@ class Monitoring extends Component
         $jumlahHalaman = max(1, (int) ceil($total / $this->perHalaman));
         $halaman = min(max(1, (int) $this->getPage()), $jumlahHalaman);
 
+        $barisHalaman = array_slice($hasil['baris'], ($halaman - 1) * $this->perHalaman, $this->perHalaman);
+
         return view('livewire.sibeban.monitoring', [
-            'baris' => array_slice($hasil['baris'], ($halaman - 1) * $this->perHalaman, $this->perHalaman),
+            'baris' => $barisHalaman,
+            // Info pulsa (terpisah dari honor; tidak memengaruhi sisa limit)
+            'pulsaMitra' => app(\App\Services\Sibeban\PulsaService::class)->perMitraBulan(array_map(fn ($b) => $b['mitra']->id, $barisHalaman), $this->bulan),
             'ringkas' => $hasil['ringkas'],
             'limit' => $hasil['limit'],
             'total' => $total,

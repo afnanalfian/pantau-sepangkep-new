@@ -85,6 +85,7 @@
                         <td class="px-4 py-3">
                             <a href="{{ route('sibeban.mitra.show', ['mitra' => $m, 'tahun' => substr($bulan, 0, 4)]) }}" wire:navigate class="font-semibold text-navy-900 hover:text-bps-blue-700">{{ $m->nama }}</a>
                             <div class="text-xs text-navy-500">{{ $m->sobat_id }}{{ $m->posisi ? ' · '.$m->posisi : '' }}</div>
+                            @if ($pp = $pulsaMitra[$m->id] ?? null)<span class="mt-1 inline-flex items-center gap-1 rounded-md bg-violet-50 px-1.5 py-0.5 text-[11px] font-medium text-violet-700" title="Pulsa {{ $pp->periode(false) }} (tidak dihitung sebagai honor)"><x-icon name="phone" class="size-3" /> Pulsa {{ Format::rp($pp->jumlah) }}</span>@endif
                         </td>
                         <td class="px-4 py-3 text-xs text-navy-700">
                             <div>{{ $m->desa ?: '–' }}</div>
@@ -121,6 +122,7 @@
                         <div class="min-w-0">
                             <p class="truncate font-semibold">{{ $m->nama }}</p>
                             <p class="truncate text-xs text-navy-500">{{ $m->sobat_id }} · {{ $m->wilayah() ?: 'wilayah belum diisi' }}</p>
+                            @if ($pp = $pulsaMitra[$m->id] ?? null)<span class="mt-1 inline-flex items-center gap-1 rounded-md bg-violet-50 px-1.5 py-0.5 text-[11px] font-medium text-violet-700" title="Pulsa {{ $pp->periode(false) }} (tidak dihitung sebagai honor)"><x-icon name="phone" class="size-3" /> Pulsa {{ Format::rp($pp->jumlah) }}</span>@endif
                         </div>
                         <span class="chip {{ HonorService::warna($b['status']) }}">{{ Format::persen($b['persen']) }}</span>
                     </div>

@@ -36,6 +36,10 @@
                     <div class="text-right"><p class="text-xs text-navy-500">Sisa limit</p><p class="font-bold {{ $c['sisa'] <= 0 ? 'text-rose-600' : 'text-bps-green-700' }}">{{ Format::rp($c['sisa']) }}</p></div>
                 </div>
                 <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-navy-50"><div class="h-full rounded-full {{ HonorService::titik($c['status']) }}" style="width: {{ min(100, $c['persen']) }}%"></div></div>
+                @if ($pp = $pulsaBulan[$b] ?? null)
+                    <a href="{{ route('sibeban.pulsa.show', $pp) }}" wire:navigate class="mt-2 flex items-center justify-between gap-2 rounded-lg bg-violet-50 px-2 py-1 text-xs text-violet-700 hover:bg-violet-100" title="Tidak dihitung sebagai honor">
+                        <span class="inline-flex items-center gap-1"><x-icon name="phone" class="size-3" /> Pulsa {{ $pp->periode() }}</span><span class="font-semibold tabular-nums">{{ Format::rp($pp->jumlah) }}</span></a>
+                @endif
                 @if ($c['rincian'])
                     <ul class="mt-3 space-y-1 border-t border-line pt-2 text-xs">
                         @foreach ($c['rincian'] as $r)

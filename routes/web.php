@@ -81,6 +81,9 @@ Route::middleware(['auth', 'account'])->group(function () {
         Route::get('/mitra/template', [SibebanTemplate::class, 'mitra'])->name('mitra.template')->middleware('role:admin');
         Route::get('/mitra/ekspor', [SibebanTemplate::class, 'ekspor'])->name('mitra.ekspor')->middleware('role:admin');
         Route::get('/mitra/{mitra}', Livewire\Sibeban\Mitra\Show::class)->name('mitra.show');
+        Route::get('/pulsa', Livewire\Sibeban\Pulsa\Index::class)->name('pulsa.index');
+        Route::get('/pulsa/{pulsa}', Livewire\Sibeban\Pulsa\Show::class)->name('pulsa.show');
+        Route::get('/pulsa/{pulsa}/excel', [SibebanTemplate::class, 'pulsa'])->name('pulsa.excel');
         Route::get('/pengaturan', Livewire\Sibeban\PengaturanLimit::class)->name('pengaturan')->middleware('role:admin');
     });
 

@@ -169,6 +169,38 @@ class TemplateController
         return $this->unduh($ss, 'ketersediaan-mitra-'.$bulan.'.xlsx');
     }
 
+    /** Daftar penerima satu pengaturan pulsa. */
+    public function pulsa(\App\Models\Sibeban\Pulsa $pulsa): StreamedResponse
+    {
+        $mitras = $pulsa->mitras()->orderBy('nama')->get();
+        $kegiatan = app(\App\Services\Sibeban\PulsaService::class)->kegiatanPerMitra($pulsa->bulan_mulai, $pulsa->bulan_selesai, $mitras->pluck('id')->all());
+
+        $ss = new Spreadsheet();
+        $ws = $ss->getActiveSheet()->setTitle('Penerima Pulsa');
+        $ws->setCellValue('A1', 'Penerima pulsa — '.$pulsa->periode(false).($pulsa->nama ? ' · '.$pulsa->nama : ''));
+        $ws->setCellValue('A2', 'Pulsa per petugas: Rp '.number_format($pulsa->jumlah, 0, ',', '.').' · '.$mitras->count().' petugas · dicetak '.now()->format('d/m/Y H:i'));
+        $ws->getStyle('A1')->getFont()->setBold(true)->setSize(13);
+        $ws->fromArray(['No', 'Sobat ID', 'Nama', 'Kecamatan', 'Desa/Kelurahan', 'Kegiatan', 'Jumlah Pulsa'], null, 'A4');
+        $r = 5;
+        foreach ($mitras as $i => $m) {
+            $ws->setCellValue("A{$r}", $i + 1);
+            $ws->setCellValueExplicit("B{$r}", $m->sobat_id, DataType::TYPE_STRING);
+            $ws->fromArray([$m->nama, $m->kecamatan, $m->desa, implode('; ', $kegiatan[$m->id] ?? []), $pulsa->jumlah], null, "C{$r}");
+            $r++;
+        }
+        $ws->setCellValue("F{$r}", 'Total');
+        $ws->setCellValue("G{$r}", '=SUM(G5:G'.($r - 1).')');
+        $ws->getStyle("F{$r}:G{$r}")->getFont()->setBold(true);
+        $this->gayaJudul($ws, 'A4:G4');
+        $ws->getStyle("G5:G{$r}")->getNumberFormat()->setFormatCode(self::RUPIAH);
+        foreach (['A' => 5, 'B' => 18, 'C' => 32, 'D' => 18, 'E' => 22, 'F' => 60, 'G' => 16] as $k => $w) {
+            $ws->getColumnDimension($k)->setWidth($w);
+        }
+        $ws->freezePane('D5');
+
+        return $this->unduh($ss, 'pulsa-'.$pulsa->bulan_mulai.($pulsa->bulan_selesai !== $pulsa->bulan_mulai ? '_'.$pulsa->bulan_selesai : '').'.xlsx');
+    }
+
     private function gayaJudul(Worksheet $ws, string $range): void
     {
         $s = $ws->getStyle($range);

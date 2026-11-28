@@ -40,7 +40,7 @@ class ExportController extends Controller
             : [$ref->copy()->startOfMonth(), $ref->copy()->endOfMonth(), WorkingDays::monthName($ref)];
 
         $tasks = Task::with(['attachments', 'approver', 'team'])
-            ->where('assignee_id', $user->id)->where('status', 'selesai')
+            ->forWorker($user->id)->where('status', 'selesai')
             ->whereBetween('completed_at', [$start, $end])->orderBy('completed_at')->get();
 
         $i = 0;

@@ -38,7 +38,7 @@ class Calendar extends Component
         $q = Task::with('assignee')->whereNotIn('status', ['batal', 'ditolak'])
             ->whereNotNull('due_date')
             ->whereBetween('due_date', [$gridStart->toDateString(), $gridEnd->toDateString()]);
-        $this->scope === 'all' && $u->canMonitor() ? $q->visibleTo($u) : $q->where('assignee_id', $u->id);
+        $this->scope === 'all' && $u->canMonitor() ? $q->visibleTo($u) : $q->forWorker($u->id);
         $tasks = $q->get()->groupBy(fn ($t) => $t->effectiveDueDate()->toDateString());
 
         $days = [];

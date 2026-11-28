@@ -5,7 +5,8 @@
 </head>
 @php
     $me = auth()->user();
-    $approvalCount = \App\Models\Task::where('verifier_id', $me->id)->whereIn('status', ['review', 'pengajuan'])->count();
+    $approvalCount = \App\Models\Task::where('verifier_id', $me->id)->whereIn('status', ['review', 'pengajuan'])->count()
+        + \App\Models\TaskDelegation::where('to_user_id', $me->id)->where('status', 'menunggu')->count();
     $nav = [
         ['Beranda', 'dashboard', 'home', true, null],
         ['Tugas', 'tasks.index', 'board', true, null],

@@ -38,7 +38,7 @@ class Matriks extends Component
     {
         $q = User::pegawai()->with('teams')->orderByRaw('COALESCE(name, username)');
         if (! ($viewer->is_admin || $viewer->is_pimpinan || $viewer->is_keuangan)) {
-            $q->whereHas('teams', fn ($w) => $w->whereIn('teams.id', $viewer->ledTeamIds()));
+            $q->whereHas('teams', fn ($w) => $w->whereIn('teams.id', $viewer->supervisedTeamIds()));
         }
         if ($team) {
             $q->whereHas('teams', fn ($w) => $w->where('teams.id', $team));
@@ -53,7 +53,7 @@ class Matriks extends Component
         $u = Auth::user();
         $q = Team::where('is_active', true)->orderBy('sort_order');
         if (! ($u->is_admin || $u->is_pimpinan || $u->is_keuangan)) {
-            $q->whereIn('id', $u->ledTeamIds());
+            $q->whereIn('id', $u->supervisedTeamIds());
         }
 
         return $q->get();

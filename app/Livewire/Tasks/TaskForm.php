@@ -46,6 +46,14 @@ class TaskForm extends Component
 
     public string $assigneeSearch = '';
 
+    /** Sasaran penugasan: 'pegawai' (perorangan) atau 'tim' (diterima ketua tim). */
+    public string $target = 'pegawai';
+
+    public array $teamTargets = [];
+
+    /** true = satu tugas dikerjakan bersama; false = setiap penerima mendapat tugas sendiri. */
+    public bool $bersama = false;
+
     // Lampiran awal
     public $suratTugas = [];
 
@@ -67,7 +75,7 @@ class TaskForm extends Component
         $this->mode = $mode === 'assign' && ! $user->canAssign() ? 'mandiri' : $mode;
         $this->start_date = now()->toDateString();
         $this->due_date = now()->addDays(7)->toDateString();
-        $this->team_id = $user->ledTeamIds()->first() ?? $user->teams()->value('teams.id');
+        $this->team_id = $user->ledTeamIds()->first() ?? $user->memberTeamIds()->first();
 
         if ($assignee) {
             $this->assignees = [(int) $assignee];
@@ -75,7 +83,7 @@ class TaskForm extends Component
 
         if ($this->mode === 'delegate' && $parent) {
             $p = Task::findOrFail($parent);
-            abort_unless($p->assignee_id === $user->id, 403);
+            abort_unless($p->isWorker($user), 403);
             $this->parentId = $p->id;
             $this->title = $p->title;
             $this->description = (string) $p->description;
@@ -137,6 +145,30 @@ class TaskForm extends Component
         $this->links = array_values($this->links);
     }
 
+    public function selectAll(): void
+    {
+        $this->assignees = array_values(array_unique(array_merge($this->assignees, $this->candidates->pluck('id')->all())));
+    }
+
+    public function clearAssignees(): void
+    {
+        $this->assignees = [];
+    }
+
+    /** Pilih seluruh anggota satu tim sekaligus. */
+    public function selectTeamMembers(int $teamId): void
+    {
+        $ids = Team::find($teamId)?->members()->where('is_active', true)->pluck('users.id')->all() ?? [];
+        $this->assignees = array_values(array_unique(array_merge($this->assignees, $ids)));
+    }
+
+    public function toggleTeamTarget(int $id): void
+    {
+        $this->teamTargets = in_array($id, $this->teamTargets)
+            ? array_values(array_diff($this->teamTargets, [$id]))
+            : array_merge($this->teamTargets, [$id]);
+    }
+
     public function toggleAssignee(int $id): void
     {
         if (in_array($id, $this->assignees)) {
@@ -167,10 +199,37 @@ class TaskForm extends Component
         return $users->sortBy(fn ($u) => $u->teams->pluck('id')->intersect($led)->isNotEmpty() ? 0 : 1)->values();
     }
 
+    /** Pilihan kolom Tim: pimpinan/admin semua tim; lainnya tim yang diikuti + subtim yang diawasi. */
     #[Computed]
     public function teams()
     {
-        return Team::where('is_active', true)->orderBy('sort_order')->get();
+        $u = Auth::user();
+        $q = Team::with('parent')->where('is_active', true)->orderByRaw('COALESCE(parent_id, id)')->orderByRaw('parent_id IS NOT NULL')->orderBy('sort_order');
+        if (! $u->is_pimpinan && ! $u->is_admin) {
+            $q->whereIn('id', $u->memberTeamIds()->merge($u->supervisedTeamIds())->unique());
+        }
+
+        return $q->get();
+    }
+
+    /** Tim yang bisa diberi tugas (pimpinan/admin: semua; ketua tim utama: subtimnya). */
+    #[Computed]
+    public function targetTeams()
+    {
+        return app(TaskService::class)->assignableTeams(Auth::user());
+    }
+
+    /** Pintasan "pilih anggota tim". */
+    #[Computed]
+    public function quickTeams()
+    {
+        $u = Auth::user();
+        $q = Team::withCount(['members' => fn ($m) => $m->where('is_active', true)])->where('is_active', true)->orderByRaw('COALESCE(parent_id, id)')->orderByRaw('parent_id IS NOT NULL')->orderBy('sort_order');
+        if (! $u->is_pimpinan && ! $u->is_admin) {
+            $q->whereIn('id', $u->supervisedTeamIds());
+        }
+
+        return $q->get();
     }
 
     /* ----------------------------------------------------------- Simpan */
@@ -192,7 +251,13 @@ class TaskForm extends Component
             'title' => 'judul tugas', 'due_date' => 'deadline', 'start_date' => 'tanggal mulai',
         ]);
 
-        if (in_array($this->mode, ['assign', 'delegate']) && ! $this->assignees) {
+        $toTeams = $this->mode === 'assign' && $this->target === 'tim';
+        if ($toTeams && ! $this->teamTargets) {
+            $this->addError('assignees', 'Pilih minimal satu tim.');
+
+            return;
+        }
+        if (in_array($this->mode, ['assign', 'delegate']) && ! $toTeams && ! $this->assignees) {
             $this->addError('assignees', 'Pilih minimal satu pegawai penerima tugas.');
 
             return;
@@ -214,9 +279,11 @@ class TaskForm extends Component
             $tasks = collect([$task]);
         } elseif ($this->mode === 'mandiri') {
             $tasks = collect([$service->submitSelf($data, $user)]);
+        } elseif ($toTeams) {
+            $tasks = $service->assignToTeams($data, $this->teamTargets, $user);
         } else {
             $parent = $this->parentId ? Task::find($this->parentId) : null;
-            $tasks = $service->assign($data, $this->assignees, $user, $parent);
+            $tasks = $service->assign($data, $this->assignees, $user, $parent, $this->bersama && count($this->assignees) > 1);
         }
 
         // Lampiran awal disalin ke setiap tugas yang dibuat
@@ -241,7 +308,9 @@ class TaskForm extends Component
             'mandiri' => 'Pengajuan tugas mandiri terkirim, menunggu persetujuan.',
             'edit' => 'Tugas berhasil diperbarui.',
             'delegate' => 'Tugas diteruskan ke '.$tasks->count().' pegawai.',
-            default => $tasks->count() > 1 ? 'Tugas dibuat untuk '.$tasks->count().' pegawai.' : 'Tugas berhasil dibuat & notifikasi terkirim.',
+            default => $toTeams ? 'Tugas terkirim ke ketua '.$tasks->count().' tim.'
+                : ($tasks->count() > 1 ? 'Tugas dibuat untuk '.$tasks->count().' pegawai.'
+                : ($this->bersama && count($this->assignees) > 1 ? 'Tugas bersama dibuat untuk '.count($this->assignees).' pegawai.' : 'Tugas berhasil dibuat & notifikasi terkirim.')),
         };
         $this->toast($msg);
 

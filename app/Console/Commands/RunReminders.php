@@ -43,7 +43,7 @@ class RunReminders extends Command
             ->whereRaw('COALESCE(extension_until, due_date) <= ?', [$limit])
             ->whereRaw('COALESCE(extension_until, due_date) >= ?', [now()->toDateString()])
             ->each(function (Task $t) {
-                $t->assignee?->notify(PantauNotification::forTask('deadline', $t,
+                app(\App\Services\TaskService::class)->notifyWorkers($t, PantauNotification::forTask('deadline', $t,
                     '⏰ Deadline '.($t->effectiveDueDate()->isToday() ? 'hari ini' : 'besok').': '.$t->title,
                     $t->code.' · jangan lupa unggah output & ajukan selesai.'));
                 $t->forceFill(['reminder_sent' => true])->saveQuietly();
@@ -55,9 +55,9 @@ class RunReminders extends Command
     {
         Task::with(['assignee', 'creator'])->overdue()->where('overdue_notified', false)
             ->each(function (Task $t) {
-                $t->assignee?->notify(PantauNotification::forTask('overdue', $t, 'Tugas melewati deadline – poin dibekukan',
+                app(\App\Services\TaskService::class)->notifyWorkers($t, PantauNotification::forTask('overdue', $t, 'Tugas melewati deadline – poin dibekukan',
                     $t->title.' · ajukan perpanjangan waktu atau segera selesaikan.'));
-                if ($t->creator && $t->creator_id !== $t->assignee_id) {
+                if ($t->creator && ! $t->isWorker($t->creator_id)) {
                     $t->creator->notify(PantauNotification::forTask('overdue', $t, 'Tugas '.$t->assignee?->display_name.' terlambat', $t->title));
                 }
                 $t->forceFill(['overdue_notified' => true])->saveQuietly();

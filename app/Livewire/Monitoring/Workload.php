@@ -35,7 +35,7 @@ class Workload extends Component
         $this->month = $this->month ?: now()->format('Y-m');
         $u = Auth::user();
         if (! $u->is_pimpinan && ! $u->is_admin && ! $this->team) {
-            $this->team = (string) $u->ledTeamIds()->first();
+            $this->team = (string) $u->supervisedTeamIds()->first();
         }
     }
 
@@ -51,7 +51,7 @@ class Workload extends Component
         $u = Auth::user();
         $q = Team::where('is_active', true)->orderBy('sort_order');
         if (! $u->is_pimpinan && ! $u->is_admin) {
-            $q->whereIn('id', $u->ledTeamIds());
+            $q->whereIn('id', $u->supervisedTeamIds());
         }
 
         return $q->get();
@@ -65,7 +65,7 @@ class Workload extends Component
         if ($this->team) {
             $q->whereHas('teams', fn ($w) => $w->where('teams.id', $this->team));
         } elseif (! $u->is_pimpinan && ! $u->is_admin) {
-            $q->whereHas('teams', fn ($w) => $w->whereIn('teams.id', $u->ledTeamIds()));
+            $q->whereHas('teams', fn ($w) => $w->whereIn('teams.id', $u->supervisedTeamIds()));
         }
 
         $rows = app(KinerjaService::class)->matriks($q->get(), Carbon::parse($this->month.'-01'));

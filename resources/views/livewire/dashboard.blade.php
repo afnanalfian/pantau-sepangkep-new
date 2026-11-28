@@ -16,7 +16,7 @@
 
                 <div class="mt-6 grid grid-cols-3 gap-3 sm:max-w-lg">
                     @foreach ([
-                        ['Penyelesaian tugas', $me['tugas_pct'], 'text-bps-blue', $me['tugas_selesai'].'/'.$me['tugas_total'].' tugas', $w['tugas']],
+                        ['Penyelesaian tugas', $me['tugas_pct'], 'text-bps-blue', $me['tugas_selesai'].'/'.$me['tugas_total'].' tugas'.($me['tugas_tim'] ? ' termasuk tim' : ''), $w['tugas']],
                         ['Kehadiran apel', $me['apel_pct'], 'text-bps-orange', $me['apel_hadir'].'/'.$me['apel_wajib'].' apel', $w['apel']],
                         ['Kehadiran rapat', $me['rapat_pct'], 'text-bps-green', $me['rapat_hadir'].'/'.$me['rapat_wajib'].' rapat', $w['rapat']],
                     ] as [$label, $pct, $color, $sub, $bobot])
@@ -66,11 +66,17 @@
             @endforeach
         </div>
 
-        @if ($c['overdue'] || $c['to_verify'])
+        @if ($c['overdue'] || $c['to_verify'] || $c['delegasi'])
             <div class="flex flex-col divide-y divide-line border-t border-line bg-paper/60 text-sm sm:flex-row sm:divide-x sm:divide-y-0">
                 @if ($c['overdue'])
                     <a href="{{ route('tasks.index', ['view' => 'list']) }}" wire:navigate class="flex flex-1 items-center gap-3 px-5 py-3.5 text-rose-700 hover:bg-rose-50">
                         <x-icon name="alert" class="size-5" /> {{ $c['overdue'] }} tugas Anda melewati deadline — selesaikan atau ajukan perpanjangan.
+                    </a>
+                @endif
+                @if ($c['delegasi'])
+                    <a href="{{ route('approvals', ['tab' => 'delegasi']) }}" wire:navigate class="flex flex-1 items-center gap-3 px-5 py-3.5 text-violet-800 hover:bg-violet-50">
+                        <x-icon name="forward" class="size-5" /> {{ $c['delegasi'] }} permintaan alih tugas menunggu jawaban Anda.
+                        <x-icon name="chevron-right" class="ml-auto size-4" />
                     </a>
                 @endif
                 @if ($c['to_verify'])

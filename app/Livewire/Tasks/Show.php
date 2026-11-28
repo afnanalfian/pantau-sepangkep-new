@@ -52,6 +52,15 @@ class Show extends Component
 
     public int $progress = 0;
 
+    // Alih tugas & kolaborator
+    public ?int $delegateTo = null;
+
+    public string $delegateNote = '';
+
+    public string $peopleSearch = '';
+
+    public array $collabIds = [];
+
     public function mount(Task $task): void
     {
         abort_unless(app(TaskService::class)->canView($task, Auth::user()), 403, 'Anda tidak memiliki akses ke tugas ini.');
@@ -85,27 +94,69 @@ class Show extends Component
         $u = Auth::user();
         $t = $this->task;
         $s = $this->svc();
-        $isAssignee = $t->assignee_id === $u->id;
+        $isAssignee = $t->isWorker($u);   // pelaksana utama atau kolaborator tugas bersama
         $manage = $s->canManage($t, $u);
+        $override = $s->canOverride($t, $u);
+        $active = in_array($t->status, ['todo', 'in_progress', 'revisi']);
+        $open = ! in_array($t->status, ['selesai', 'batal', 'ditolak']);
 
         return [
             'assignee' => $isAssignee,
             'manage' => $manage,
+            'override' => $override,
             'verify' => $s->canVerify($t, $u),
             'start' => $isAssignee && in_array($t->status, ['todo']),
-            'submit' => $isAssignee && in_array($t->status, ['todo', 'in_progress', 'revisi']),
+            'submit' => $isAssignee && $active,
             'review' => $t->status === 'review' && $s->canVerify($t, $u),
             'decideSubmission' => $t->status === 'pengajuan' && $s->canVerify($t, $u),
-            'delegate' => $isAssignee && $u->canAssign() && in_array($t->status, ['todo', 'in_progress', 'revisi']),
+            'delegate' => $isAssignee && $u->canAssign() && $active,
+            'delegateOut' => $isAssignee && $active,
+            'collabAdd' => ($manage || $isAssignee) && $open && $t->status !== 'pengajuan',
+            'collabManage' => $manage && $open,
+            'split' => $manage && $open && $t->isBersama(),
+            'reviseDone' => $override && $t->status === 'selesai',
             'edit' => ($manage && ! in_array($t->status, ['selesai', 'batal'])) || ($isAssignee && $t->status === 'pengajuan'),
-            'cancel' => $manage && ! in_array($t->status, ['selesai', 'batal', 'ditolak']),
+            'cancel' => ($manage && $open) || ($override && $t->status === 'selesai'),
             'reopen' => ($manage || $s->canVerify($t, $u)) && in_array($t->status, ['selesai', 'batal']),
-            'delete' => $u->is_admin || ($t->creator_id === $u->id && in_array($t->status, ['todo', 'pengajuan', 'batal', 'ditolak'])),
-            'extension' => $isAssignee && in_array($t->status, ['todo', 'in_progress', 'revisi']) && $t->due_date,
+            'delete' => $s->canDelete($t, $u),
+            'extension' => $isAssignee && $active && $t->due_date,
             'decideExtension' => ($manage || $s->canVerify($t, $u)) && $s->pendingExtension($t),
             'upload' => $isAssignee || $manage || $t->creator_id === $u->id,
             'uploadOutput' => $isAssignee && ! in_array($t->status, ['selesai', 'batal']),
         ];
+    }
+
+    #[Computed]
+    public function workers()
+    {
+        return $this->task->workers();
+    }
+
+    #[Computed]
+    public function collabRequests()
+    {
+        return $this->task->collaboratorRequests()->get();
+    }
+
+    /** Permintaan alih tugas yang masih menunggu. */
+    #[Computed]
+    public function pendingDelegations()
+    {
+        return $this->task->delegations()->with(['from', 'to'])->where('status', 'menunggu')->get();
+    }
+
+    /** Daftar pegawai untuk modal alih tugas / kolaborator. */
+    #[Computed]
+    public function people()
+    {
+        $exclude = array_merge($this->task->workerIds(), [$this->task->verifier_id]);
+        $q = \App\Models\User::pegawai()->with('teams')->whereNotIn('id', array_filter($exclude))->orderByRaw('COALESCE(name, username)');
+        if ($this->peopleSearch !== '') {
+            $w = '%'.$this->peopleSearch.'%';
+            $q->where(fn ($x) => $x->where('name', 'like', $w)->orWhere('username', 'like', $w)->orWhere('jabatan', 'like', $w));
+        }
+
+        return $q->limit(60)->get();
     }
 
     #[Computed]
@@ -238,6 +289,10 @@ class Show extends Component
 
     public function openAction(string $action): void
     {
+        $this->peopleSearch = '';
+        $this->delegateTo = null;
+        $this->delegateNote = '';
+        $this->collabIds = [];
         $this->actionModal = $action;
         $this->actionNote = '';
         $this->extensionDate = $this->task->effectiveDueDate()?->copy()->addDays(3)->toDateString();
@@ -255,7 +310,7 @@ class Show extends Component
         $u = Auth::user();
         $note = trim($this->actionNote);
 
-        if (in_array($this->actionModal, ['revise', 'reject']) && $note === '') {
+        if (in_array($this->actionModal, ['revise', 'reject', 'reviseDone']) && $note === '') {
             $this->addError('actionNote', 'Catatan wajib diisi.');
 
             return;
@@ -269,6 +324,14 @@ class Show extends Component
             'reject' => $this->attempt(fn () => $this->svc()->reject($this->task, $u, $note), 'Pengajuan ditolak.'),
             'cancel' => $this->attempt(fn () => $this->svc()->cancel($this->task, $u, $note ?: null), 'Tugas dibatalkan.'),
             'reopen' => $this->attempt(fn () => $this->svc()->reopen($this->task, $u), 'Tugas dibuka kembali.'),
+            'reviseDone' => $this->attempt(fn () => $this->svc()->reviseCompleted($this->task, $u, $note), 'Tugas dikembalikan untuk direvisi.'),
+            'delegateOut' => $this->delegateTo
+                ? $this->attempt(fn () => $this->svc()->requestDelegation($this->task, $u, (int) $this->delegateTo, trim($this->delegateNote)), 'Permintaan alih tugas terkirim. Menunggu jawaban penerima.')
+                : $this->failWith('delegateTo', 'Pilih pegawai penerima.'),
+            'collab' => $this->collabIds
+                ? $this->attempt(fn () => $this->toastCollab($this->svc()->addCollaborators($this->task, $u, $this->collabIds)))
+                : $this->failWith('collab', 'Pilih minimal satu pegawai.'),
+            'split' => $this->attempt(fn () => $this->toast('Tugas dipecah menjadi '.($this->svc()->splitBersama($this->task, $u)->count() + 1).' tugas masing-masing.')),
             'extension' => $this->requestExtension($note),
             'delete' => $this->deleteTask(),
             default => false,
@@ -281,6 +344,51 @@ class Show extends Component
         if ($ok) {
             $this->actionModal = null;
         }
+        $this->after();
+    }
+
+    private function failWith(string $field, string $msg): bool
+    {
+        $this->addError($field, $msg);
+
+        return false;
+    }
+
+    private function toastCollab(string $status): void
+    {
+        $this->toast($status === 'aktif' ? 'Kolaborator ditambahkan. Tugas ini kini dikerjakan bersama.' : 'Usulan kolaborator terkirim ke pemberi tugas untuk disetujui.');
+    }
+
+    public function toggleCollab(int $id): void
+    {
+        $this->collabIds = in_array($id, $this->collabIds) ? array_values(array_diff($this->collabIds, [$id])) : array_merge($this->collabIds, [$id]);
+    }
+
+    public function decideDelegation(int $id, bool $accept): void
+    {
+        $d = $this->task->delegations()->findOrFail($id);
+        $accept
+            ? $this->attempt(fn () => $this->svc()->acceptDelegation($d, Auth::user()), 'Tugas diterima. Kini tugas ini menjadi tanggung jawab Anda.')
+            : $this->attempt(fn () => $this->svc()->rejectDelegation($d, Auth::user()), 'Permintaan alih tugas ditolak.');
+        $this->after();
+    }
+
+    public function cancelDelegation(int $id): void
+    {
+        $d = $this->task->delegations()->findOrFail($id);
+        $this->attempt(fn () => $this->svc()->cancelDelegation($d, Auth::user()), 'Permintaan alih tugas dibatalkan.');
+        $this->after();
+    }
+
+    public function decideCollaborator(int $userId, bool $approve): void
+    {
+        $this->attempt(fn () => $this->svc()->decideCollaborator($this->task, Auth::user(), $userId, $approve), $approve ? 'Kolaborator disetujui.' : 'Usulan kolaborator ditolak.');
+        $this->after();
+    }
+
+    public function removeWorker(int $userId): void
+    {
+        $this->attempt(fn () => $this->svc()->removeCollaborator($this->task, Auth::user(), $userId), 'Pelaksana dikeluarkan dari tugas.');
         $this->after();
     }
 
@@ -299,8 +407,7 @@ class Show extends Component
     private function deleteTask(): bool
     {
         abort_unless($this->can['delete'], 403);
-        $this->svc()->log($this->task, Auth::user(), 'deleted', 'menghapus tugas');
-        $this->task->delete();
+        $this->svc()->delete($this->task, Auth::user());
         $this->toast('Tugas dihapus.');
 
         return true;
@@ -331,7 +438,8 @@ class Show extends Component
     {
         $this->task->refresh();
         $this->progress = $this->task->progress;
-        unset($this->can, $this->timeline, $this->attachmentsByCategory, $this->pendingExtension, $this->children);
+        unset($this->can, $this->timeline, $this->attachmentsByCategory, $this->pendingExtension, $this->children,
+            $this->workers, $this->collabRequests, $this->pendingDelegations, $this->people);
     }
 
     public function render()

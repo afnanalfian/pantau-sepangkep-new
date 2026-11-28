@@ -68,12 +68,13 @@
                 </div>
                 @if ($now['tugas_items']->isNotEmpty())
                     <details class="border-t border-line">
-                        <summary class="cursor-pointer px-5 py-3 text-sm font-semibold text-bps-blue-700">Lihat {{ $now['tugas_semua'] }} tugas tanggungan bulan ini</summary>
+                        <summary class="cursor-pointer px-5 py-3 text-sm font-semibold text-bps-blue-700">Lihat {{ $now['tugas_semua'] }} tugas tanggungan bulan ini{{ $now['tugas_tim'] ? ' (termasuk '.$now['tugas_tim'].' tugas tim yang Anda pimpin)' : '' }}</summary>
                         <ul class="divide-y divide-line border-t border-line">
                             @foreach ($now['tugas_items'] as $it)
                                 <li class="flex items-center gap-3 px-5 py-2.5 text-sm">
                                     <span class="grid size-6 shrink-0 place-items-center rounded-full {{ $it['done'] ? 'bg-bps-green text-white' : ($it['pending'] ? 'bg-bps-blue-50 text-bps-blue-700' : 'bg-rose-50 text-rose-600') }}"><x-icon :name="$it['done'] ? 'check' : ($it['pending'] ? 'clock' : 'x')" class="size-3.5" /></span>
                                     <a href="{{ route('tasks.show', $it['task']->id) }}" wire:navigate class="min-w-0 flex-1 truncate hover:text-bps-blue-700">{{ $it['task']->title }}</a>
+                                    @if (($it['sumber'] ?? 'pribadi') === 'tim')<span class="chip bg-violet-50 text-violet-700 ring-violet-600/20" title="Tugas anggota tim yang Anda pimpin">Tim</span>@endif
                                     @if ($it['carry'])<span class="chip bg-rose-50 text-rose-700 ring-rose-600/20">Tunggakan</span>@endif
                                     <span class="text-xs whitespace-nowrap text-navy-500">{{ tgl($it['due'], 'j M') }}</span>
                                 </li>

@@ -60,6 +60,12 @@ class User extends Authenticatable
         return $this->hasMany(Task::class, 'assignee_id');
     }
 
+    /** Tugas bersama yang diikuti sebagai kolaborator. */
+    public function collaborations(): BelongsToMany
+    {
+        return $this->belongsToMany(Task::class, 'task_collaborators')->withPivot(['status', 'added_by'])->withTimestamps();
+    }
+
     public function leaves(): HasMany
     {
         return $this->hasMany(Leave::class);
@@ -150,6 +156,47 @@ class User extends Authenticatable
     public function ledTeamIds(): Collection
     {
         return once(fn () => $this->ledTeams()->pluck('teams.id'));
+    }
+
+    /** Tim yang diikuti (sebagai ketua atau anggota). */
+    public function memberTeamIds(): Collection
+    {
+        return once(fn () => $this->teams()->pluck('teams.id'));
+    }
+
+    /** Tim utama yang dipimpin (bukan subtim). */
+    public function ledMainTeamIds(): Collection
+    {
+        return once(fn () => Team::whereIn('id', $this->ledTeamIds())->whereNull('parent_id')->pluck('id'));
+    }
+
+    /**
+     * Tim yang diawasi: tim yang dipimpin + seluruh subtim di bawah tim utama yang dipimpin.
+     * Dipakai untuk visibilitas, wewenang mengelola tugas, dan penilaian kinerja ketua.
+     */
+    public function supervisedTeamIds(): Collection
+    {
+        return once(function () {
+            $led = $this->ledTeamIds();
+            $subs = $this->ledMainTeamIds()->isEmpty() ? collect()
+                : Team::whereIn('parent_id', $this->ledMainTeamIds())->pluck('id');
+
+            return $led->merge($subs)->unique()->values();
+        });
+    }
+
+    /** Ketua tim utama dari tim ini (tim itu sendiri bila tim utama, atau induknya bila subtim). */
+    public function leadsMainOf(?int $teamId): bool
+    {
+        if (! $teamId) {
+            return false;
+        }
+        $team = Team::find($teamId);
+        if (! $team) {
+            return false;
+        }
+
+        return $this->ledMainTeamIds()->contains($team->parent_id ?? $team->id);
     }
 
     public function isLeader(): bool

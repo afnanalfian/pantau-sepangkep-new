@@ -14,7 +14,7 @@
          :class="over && 'ring-2 ring-bps-blue ring-offset-2'">
     <header class="flex flex-wrap items-center gap-3 px-5 pt-4 pb-3">
         <span class="grid size-8 place-items-center rounded-lg {{ $accent }}"><x-icon :name="$icon" class="size-4.5" /></span>
-        <div class="min-w-0 flex-1">
+        <div class="min-w-[11rem] flex-1">
             <h3 class="text-sm font-bold">{{ $meta['label'] }} <span class="font-medium text-navy-300">({{ $items->count() }})</span></h3>
             @if ($cat === 'output')<p class="text-xs text-navy-500">Wajib diisi sebelum mengajukan selesai: PDF, Word, gambar, atau link.</p>@endif
         </div>

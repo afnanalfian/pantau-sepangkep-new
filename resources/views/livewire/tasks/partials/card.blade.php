@@ -1,10 +1,13 @@
-@php $due = $t->effectiveDueDate(); $showAssignee = $scope !== 'mine'; @endphp
+@php $due = $t->effectiveDueDate(); $showAssignee = $scope !== 'mine'; $collabs = $t->relationLoaded('collaborators') ? $t->collaborators : collect(); @endphp
 <div wire:key="card-{{ $t->id }}" wire:sort:item="{{ $t->id }}"
      class="group cursor-grab rounded-xl border border-line bg-white p-3.5 transition hover:border-navy-300 active:cursor-grabbing {{ $t->isOverdue() ? 'border-l-4 border-l-rose-500' : '' }}">
     <div class="flex items-start gap-2">
         <a href="{{ route('tasks.show', $t) }}" wire:navigate wire:sort:ignore class="min-w-0 flex-1 text-sm leading-snug font-semibold text-navy-900 hover:text-bps-blue-700">{{ $t->title }}</a>
     </div>
     <p class="mt-1 text-[11px] text-navy-500">{{ $t->code }}{{ $t->team ? ' · '.$t->team->name : '' }}{{ $t->type === 'disposisi' ? ' · Disposisi' : '' }}</p>
+    @if ($collabs->isNotEmpty())
+        <p class="mt-1.5 inline-flex items-center gap-1 rounded-md bg-violet-50 px-1.5 py-0.5 text-[11px] font-semibold text-violet-700" title="{{ collect([$t->assignee])->concat($collabs)->pluck('display_name')->join(', ') }}"><x-icon name="users" class="size-3.5" /> Bersama {{ $collabs->count() + 1 }} orang</p>
+    @endif
 
     @if ($t->progress > 0 && $t->status !== 'selesai')
         <div class="slant-track mt-2.5 h-1.5"><div class="absolute inset-y-0 left-0 bg-bps-blue" style="width: {{ $t->progress }}%"></div></div>
@@ -24,7 +27,7 @@
             @if ($showAssignee)<x-avatar :user="$t->assignee" size="xs" />@endif
         </span>
     </div>
-    @if ($t->status === 'todo' && $t->assignee_id === auth()->id())
+    @if ($t->status === 'todo' && ($t->assignee_id === auth()->id() || $collabs->contains('id', auth()->id())))
         <button wire:sort:ignore wire:click="quickStart({{ $t->id }})" class="mt-3 hidden w-full items-center justify-center gap-1.5 rounded-lg bg-bps-blue-50 py-1.5 text-xs font-semibold text-bps-blue-700 group-hover:flex">
             <x-icon name="play" class="size-3.5" /> Mulai kerjakan
         </button>

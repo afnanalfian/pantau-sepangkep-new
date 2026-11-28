@@ -48,10 +48,11 @@
                     </div>
                     <div>
                         <label class="label">Tim</label>
-                        <select wire:model="team_id" class="input">
+                        <select wire:model="team_id" class="input" @disabled($mode === 'assign' && $target === 'tim')>
                             <option value="">—</option>
-                            @foreach ($this->teams as $t)<option value="{{ $t->id }}">{{ $t->name }}</option>@endforeach
+                            @foreach ($this->teams as $t)<option value="{{ $t->id }}">{{ $t->parent_id ? '— '.$t->name : $t->name }}</option>@endforeach
                         </select>
+                        @if ($mode === 'assign' && $target === 'tim')<p class="hint">Mengikuti tim tujuan.</p>@endif
                     </div>
                 </div>
 
@@ -106,13 +107,52 @@
                     <div class="mt-3 flex h-1" aria-hidden="true"><span class="flex-1 bg-bps-blue"></span><span class="flex-1 bg-bps-green"></span><span class="flex-1 bg-bps-orange"></span></div>
                 </div>
 
-                @if (in_array($mode, ['assign', 'delegate', 'edit']) && ($mode !== 'edit' || $u->canAssign()))
+                @if ($mode === 'assign' && $this->targetTeams->isNotEmpty())
+                    <div class="flex rounded-xl bg-navy-50 p-1">
+                        <button type="button" wire:click="$set('target', 'pegawai')" class="tab flex-1 {{ $target === 'pegawai' ? 'active' : '' }}">Ke pegawai</button>
+                        <button type="button" wire:click="$set('target', 'tim')" class="tab flex-1 {{ $target === 'tim' ? 'active' : '' }}">Ke tim</button>
+                    </div>
+                @endif
+
+                @if ($mode === 'assign' && $target === 'tim')
+                    <div>
+                        <div class="flex items-center justify-between">
+                            <label class="label mb-0">Tim penerima</label>
+                            @if (count($teamTargets))<span class="text-xs font-semibold text-bps-blue-700">{{ count($teamTargets) }} dipilih</span>@endif
+                        </div>
+                        <div class="mt-2 max-h-80 space-y-0.5 overflow-y-auto rounded-xl border border-line p-1">
+                            @foreach ($this->targetTeams as $tm)
+                                @php $sel = in_array($tm->id, $teamTargets); $ketua = $tm->leaders->first(); @endphp
+                                <button type="button" wire:key="tt-{{ $tm->id }}" wire:click="toggleTeamTarget({{ $tm->id }})" @disabled(! $ketua)
+                                        class="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left disabled:opacity-50 {{ $sel ? 'bg-bps-blue-50' : 'hover:bg-paper' }} {{ $tm->parent_id ? 'pl-6' : '' }}">
+                                    <span class="size-2.5 shrink-0 rounded-full {{ $tm->color() }}"></span>
+                                    <span class="min-w-0 flex-1">
+                                        <span class="block truncate text-sm font-medium">{{ $tm->name }}</span>
+                                        <span class="block truncate text-[11px] text-navy-500">{{ $ketua ? 'Ketua: '.$ketua->display_name : 'Belum ada ketua' }}{{ $tm->parent ? ' · subtim '.$tm->parent->name : '' }}</span>
+                                    </span>
+                                    <span class="grid size-5 place-items-center rounded-md border {{ $sel ? 'border-bps-blue bg-bps-blue text-white' : 'border-navy-100' }}">@if ($sel)<x-icon name="check" class="size-3.5" />@endif</span>
+                                </button>
+                            @endforeach
+                        </div>
+                        @error('assignees') <p class="error">{{ $message }}</p> @enderror
+                        <p class="hint">Tugas masuk ke ketua tim. Ketua bisa mengerjakannya sendiri atau meneruskannya ke anggota.</p>
+                    </div>
+                @elseif (in_array($mode, ['assign', 'delegate', 'edit']) && ($mode !== 'edit' || $u->canAssign()))
                     <div>
                         <div class="flex items-center justify-between">
                             <label class="label mb-0">{{ $mode === 'edit' ? 'Pelaksana' : 'Penerima tugas' }}</label>
                             @if (count($assignees))<span class="text-xs font-semibold text-bps-blue-700">{{ count($assignees) }} dipilih</span>@endif
                         </div>
                         <input wire:model.live.debounce.250ms="assigneeSearch" type="search" placeholder="Cari nama / jabatan" class="input mt-1.5 py-2">
+                        @if ($mode !== 'edit')
+                            <div class="mt-2 flex flex-wrap items-center gap-1.5">
+                                <button type="button" wire:click="selectAll" class="rounded-lg bg-bps-blue-50 px-2 py-1 text-xs font-semibold text-bps-blue-700 hover:bg-bps-blue-100">Pilih semua ({{ $this->candidates->count() }})</button>
+                                @if (count($assignees))<button type="button" wire:click="clearAssignees" class="rounded-lg px-2 py-1 text-xs font-semibold text-navy-500 hover:bg-navy-50">Kosongkan</button>@endif
+                                @foreach ($this->quickTeams as $qt)
+                                    <button type="button" wire:key="qt-{{ $qt->id }}" wire:click="selectTeamMembers({{ $qt->id }})" title="Pilih semua anggota {{ $qt->name }}" class="rounded-lg border border-line px-2 py-1 text-[11px] text-navy-600 hover:border-navy-300">+ {{ $qt->name }} ({{ $qt->members_count }})</button>
+                                @endforeach
+                            </div>
+                        @endif
                         <div class="mt-2 max-h-72 space-y-0.5 overflow-y-auto rounded-xl border border-line p-1">
                             @foreach ($this->candidates as $c)
                                 @php $sel = in_array($c->id, $assignees); @endphp
@@ -128,8 +168,17 @@
                             @endforeach
                         </div>
                         @error('assignees') <p class="error">{{ $message }}</p> @enderror
-                        @if ($mode === 'assign' && count($assignees) > 1)
-                            <p class="hint">Setiap penerima mendapat tugas sendiri, sehingga penyelesaiannya tercatat per orang.</p>
+                        @if ($mode !== 'edit' && count($assignees) > 1)
+                            <div class="mt-3 space-y-1.5">
+                                <label class="flex cursor-pointer gap-2.5 rounded-xl border p-2.5 {{ ! $bersama ? 'border-bps-blue bg-bps-blue-50/50' : 'border-line' }}">
+                                    <input type="radio" wire:model.live="bersama" value="0" class="mt-0.5 text-bps-blue">
+                                    <span class="text-xs"><b class="block text-sm text-navy-900">Tugas masing-masing</b>Setiap orang mendapat tugas sendiri dan wajib menyelesaikannya sendiri (mis. mengisi SAKIP).</span>
+                                </label>
+                                <label class="flex cursor-pointer gap-2.5 rounded-xl border p-2.5 {{ $bersama ? 'border-bps-blue bg-bps-blue-50/50' : 'border-line' }}">
+                                    <input type="radio" wire:model.live="bersama" value="1" class="mt-0.5 text-bps-blue">
+                                    <span class="text-xs"><b class="block text-sm text-navy-900">Dikerjakan bersama</b>Satu tugas milik {{ count($assignees) }} orang. Siapa pun bisa memperbarui progres, mengunggah output, dan menandai selesai.</span>
+                                </label>
+                            </div>
                         @endif
                     </div>
                 @endif

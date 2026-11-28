@@ -1,5 +1,5 @@
 <div>
-    <x-page-header title="Kelola tim" subtitle="Seret pegawai dari daftar kiri ke kolom tim. Klik bintang untuk menetapkan ketua tim.">
+    <x-page-header title="Kelola tim" subtitle="Seret pegawai dari daftar kiri ke kolom tim. Klik bintang untuk menetapkan ketua tim. Subtim ditampilkan setelah tim utamanya.">
         <x-slot:actions>
             <div class="flex rounded-xl bg-navy-50 p-1" title="Perilaku saat menyeret antar tim">
                 <button wire:click="$set('mode', 'move')" class="tab {{ $mode === 'move' ? 'active' : '' }}">Pindahkan</button>
@@ -34,14 +34,15 @@
         {{-- Kolom tim --}}
         <div class="grid flex-1 content-start gap-4 sm:grid-cols-2 2xl:grid-cols-3">
             @foreach ($this->teams as $team)
-                <section wire:key="team-col-{{ $team->id }}" class="card flex flex-col overflow-hidden {{ $team->is_active ? '' : 'opacity-60' }}">
+                <section wire:key="team-col-{{ $team->id }}" class="card flex flex-col overflow-hidden {{ $team->is_active ? '' : 'opacity-60' }} {{ $team->parent_id ? 'border-dashed' : '' }}">
                     <div class="h-1.5 {{ $team->color() }}"></div>
                     <header class="flex items-start gap-2 px-4 pt-3 pb-2">
                         <div class="min-w-0 flex-1">
                             <h2 class="flex items-center gap-2 font-bold">{{ $team->name }}
-                                @if ($team->is_core)<span class="chip bg-navy-50 text-navy-500 ring-line">Utama</span>@endif
+                                @if ($team->parent_id)<span class="chip bg-violet-50 text-violet-700 ring-violet-600/20">Subtim</span>@elseif ($team->is_core)<span class="chip bg-navy-50 text-navy-500 ring-line">Utama</span>@endif
                                 @unless ($team->is_active)<span class="chip bg-slate-100 text-slate-500 ring-slate-300">Nonaktif</span>@endunless
                             </h2>
+                            @if ($team->parent)<p class="text-xs font-medium text-violet-700">di bawah {{ $team->parent->name }}</p>@endif
                             <p class="text-xs text-navy-500">{{ $team->members->count() }} anggota · ketua: {{ $team->members->where('pivot.role', 'ketua')->pluck('display_name')->join(', ') ?: 'belum ada' }}</p>
                         </div>
                         <div x-data="{ m: false }" class="relative">
@@ -88,6 +89,13 @@
                     @endforeach
                 </div></div>
             <div><label class="label">Deskripsi</label><textarea wire:model="description" rows="2" class="input"></textarea></div>
+            <div><label class="label">Di bawah tim utama (opsional)</label>
+                <select wire:model="parent_id" class="input @error('parent_id') input-error @enderror">
+                    <option value="">— Tim utama (tidak bernaung) —</option>
+                    @foreach ($this->mainTeams as $mt)@if ($mt->id !== $editId)<option value="{{ $mt->id }}">Subtim dari {{ $mt->name }}</option>@endif @endforeach
+                </select>
+                @error('parent_id')<p class="error">{{ $message }}</p>@enderror
+                <p class="hint">Ketua subtim harus anggota tim utamanya. Ketua tim utama tidak bisa masuk subtimnya.</p></div>
         </form>
         <x-slot:footer>
             <button wire:click="$set('showForm', false)" class="btn btn-ghost">Batal</button>

@@ -2,13 +2,15 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Team extends Model
 {
-    protected $fillable = ['name', 'slug', 'color', 'icon', 'description', 'is_core', 'is_active', 'sort_order'];
+    protected $fillable = ['parent_id', 'name', 'slug', 'color', 'icon', 'description', 'is_core', 'is_active', 'sort_order'];
 
     protected function casts(): array
     {
@@ -35,6 +37,45 @@ class Team extends Model
     public function leaders(): BelongsToMany
     {
         return $this->members()->wherePivot('role', 'ketua');
+    }
+
+    /** Tim utama tempat subtim ini bernaung. */
+    public function parent(): BelongsTo
+    {
+        return $this->belongsTo(Team::class, 'parent_id');
+    }
+
+    /** Subtim di bawah tim utama ini. */
+    public function children(): HasMany
+    {
+        return $this->hasMany(Team::class, 'parent_id')->orderBy('sort_order')->orderBy('id');
+    }
+
+    public function scopeUtama(Builder $q): Builder
+    {
+        return $q->whereNull('parent_id');
+    }
+
+    public function isSub(): bool
+    {
+        return (bool) $this->parent_id;
+    }
+
+    /** Tim utama (diri sendiri bila sudah tim utama). */
+    public function mainTeam(): Team
+    {
+        return $this->parent_id ? ($this->parent ?? $this) : $this;
+    }
+
+    public function leaderIds(): \Illuminate\Support\Collection
+    {
+        return $this->members()->wherePivot('role', 'ketua')->pluck('users.id');
+    }
+
+    /** Nama lengkap, mis. "Distribusi › Statistik Harga". */
+    public function fullName(): string
+    {
+        return $this->parent_id && $this->parent ? $this->parent->name.' › '.$this->name : $this->name;
     }
 
     public function tasks(): HasMany

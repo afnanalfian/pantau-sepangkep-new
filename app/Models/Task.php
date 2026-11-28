@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
@@ -114,6 +115,25 @@ class Task extends Model
         return $this->belongsTo(User::class, 'approved_by')->withTrashed();
     }
 
+    /** Kolaborator aktif tugas bersama (selain pelaksana utama). */
+    public function collaborators(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'task_collaborators')->withPivot(['status', 'added_by'])->withTimestamps()
+            ->wherePivot('status', 'aktif');
+    }
+
+    /** Usulan kolaborator yang menunggu persetujuan pemberi tugas. */
+    public function collaboratorRequests(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'task_collaborators')->withPivot(['status', 'added_by'])->withTimestamps()
+            ->wherePivot('status', 'diajukan');
+    }
+
+    public function delegations(): HasMany
+    {
+        return $this->hasMany(TaskDelegation::class)->latest();
+    }
+
     public function attachments(): HasMany
     {
         return $this->hasMany(TaskAttachment::class)->latest();
@@ -143,17 +163,26 @@ class Task extends Model
             ->whereRaw('COALESCE(extension_until, due_date) < ?', [now()->toDateString()]);
     }
 
+    /** Tugas yang dikerjakan user (pelaksana utama atau kolaborator aktif tugas bersama). */
+    public function scopeForWorker(Builder $q, int $userId): Builder
+    {
+        return $q->where(fn ($w) => $w->where('assignee_id', $userId)
+            ->orWhereIn('tasks.id', fn ($s) => $s->select('task_id')->from('task_collaborators')->where('user_id', $userId)->where('status', 'aktif')));
+    }
+
     public function scopeVisibleTo(Builder $q, User $user): Builder
     {
         if ($user->is_pimpinan || $user->is_admin) {
             return $q;
         }
-        $teamIds = $user->ledTeamIds();
+        $teamIds = $user->supervisedTeamIds();
 
         return $q->where(function ($w) use ($user, $teamIds) {
             $w->where('assignee_id', $user->id)
                 ->orWhere('creator_id', $user->id)
-                ->orWhere('verifier_id', $user->id);
+                ->orWhere('verifier_id', $user->id)
+                ->orWhereIn('tasks.id', fn ($s) => $s->select('task_id')->from('task_collaborators')->where('user_id', $user->id))
+                ->orWhereIn('tasks.id', fn ($s) => $s->select('task_id')->from('task_delegations')->where('to_user_id', $user->id));
             if ($teamIds->isNotEmpty()) {
                 $w->orWhereIn('team_id', $teamIds)
                     ->orWhereIn('assignee_id', function ($sub) use ($teamIds) {
@@ -194,6 +223,32 @@ class Task extends Model
 
         return $due && ! $this->isOverdue() && in_array($this->status, ['todo', 'in_progress', 'revisi'])
             && $due->copy()->endOfDay()->diffInHours(now(), true) <= 48;
+    }
+
+    /** Id seluruh pelaksana: pelaksana utama + kolaborator aktif. */
+    public function workerIds(): array
+    {
+        return array_values(array_unique(array_merge([(int) $this->assignee_id], $this->collaborators()->pluck('users.id')->map(fn ($i) => (int) $i)->all())));
+    }
+
+    public function isWorker(User|int|null $user): bool
+    {
+        $id = $user instanceof User ? $user->id : $user;
+
+        return $id && in_array((int) $id, $this->workerIds(), true);
+    }
+
+    /** Tugas bersama = punya minimal satu kolaborator aktif. */
+    public function isBersama(): bool
+    {
+        return $this->collaborators()->exists();
+    }
+
+    /** Seluruh pelaksana sebagai model User. */
+    public function workers()
+    {
+        return User::withTrashed()->whereIn('id', $this->workerIds())->get()
+            ->sortBy(fn ($u) => $u->id === $this->assignee_id ? 0 : 1)->values();
     }
 
     public function hasOutput(): bool

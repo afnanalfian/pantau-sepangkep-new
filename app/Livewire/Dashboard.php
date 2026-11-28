@@ -26,7 +26,7 @@ class Dashboard extends Component
     public function counts(): array
     {
         $u = Auth::user();
-        $base = Task::where('assignee_id', $u->id);
+        $base = Task::forWorker($u->id);
 
         return [
             'todo' => (clone $base)->where('status', 'todo')->count(),
@@ -35,13 +35,14 @@ class Dashboard extends Component
             'done' => (clone $base)->where('status', 'selesai')->where('completed_at', '>=', now()->startOfMonth())->count(),
             'overdue' => (clone $base)->overdue()->count(),
             'to_verify' => Task::where('verifier_id', $u->id)->whereIn('status', ['review', 'pengajuan'])->count(),
+            'delegasi' => \App\Models\TaskDelegation::where('to_user_id', $u->id)->where('status', 'menunggu')->count(),
         ];
     }
 
     #[Computed]
     public function upcoming()
     {
-        return Task::with(['team', 'creator'])->where('assignee_id', Auth::id())
+        return Task::with(['team', 'creator'])->forWorker(Auth::id())
             ->whereIn('status', ['todo', 'in_progress', 'revisi'])
             ->orderByRaw('COALESCE(extension_until, due_date) IS NULL, COALESCE(extension_until, due_date)')
             ->limit(6)->get();

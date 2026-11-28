@@ -47,7 +47,35 @@ class Approvals extends Component
             'review' => Task::where('verifier_id', $u->id)->where('status', 'review')->count(),
             'pengajuan' => Task::where('verifier_id', $u->id)->where('status', 'pengajuan')->count(),
             'perpanjangan' => $this->extensionQuery()->count(),
+            'delegasi' => $this->delegationQuery()->count(),
+            'kolaborator' => $this->collabQuery()->count(),
         ];
+    }
+
+    /** Permintaan alih tugas yang ditujukan ke saya. */
+    protected function delegationQuery()
+    {
+        return \App\Models\TaskDelegation::with(['task.creator', 'from'])->where('to_user_id', Auth::id())->where('status', 'menunggu')
+            ->whereHas('task', fn ($q) => $q->whereIn('status', ['todo', 'in_progress', 'revisi']))->oldest();
+    }
+
+    /** Usulan kolaborator pada tugas yang saya kelola (pemberi tugas / verifikator / ketua). */
+    protected function collabQuery()
+    {
+        $u = Auth::user();
+
+        return \Illuminate\Support\Facades\DB::table('task_collaborators')->where('task_collaborators.status', 'diajukan')
+            ->join('tasks', 'tasks.id', '=', 'task_collaborators.task_id')->whereNull('tasks.deleted_at')
+            ->whereNotIn('tasks.status', ['selesai', 'batal', 'ditolak'])
+            ->where(function ($w) use ($u) {
+                $w->where('tasks.creator_id', $u->id)->orWhere('tasks.verifier_id', $u->id);
+                if ($u->is_pimpinan || $u->is_admin) {
+                    $w->orWhereRaw('1=1');
+                } elseif ($u->supervisedTeamIds()->isNotEmpty()) {
+                    $w->orWhereIn('tasks.team_id', $u->supervisedTeamIds());
+                }
+            })
+            ->select('task_collaborators.*');
     }
 
     protected function extensionQuery()
@@ -65,6 +93,8 @@ class Approvals extends Component
         return match ($this->tab) {
             'pengajuan' => $this->base()->where('status', 'pengajuan')->oldest('submitted_at')->get(),
             'perpanjangan' => $this->extensionQuery()->get(),
+            'delegasi' => $this->delegationQuery()->get(),
+            'kolaborator' => $this->collabQuery()->get()->map(fn ($r) => (object) ['row' => $r, 'task' => Task::with('assignee')->find($r->task_id), 'user' => \App\Models\User::find($r->user_id), 'by' => \App\Models\User::find($r->added_by)]),
             'semua' => $this->base()->whereIn('status', ['review', 'pengajuan'])->oldest('submitted_at')->get(),
             default => $this->base()->where('status', 'review')->oldest('submitted_at')->get(),
         };
@@ -104,6 +134,23 @@ class Approvals extends Component
         if ($ok) {
             $this->noteFor = null;
         }
+        unset($this->items, $this->counts);
+    }
+
+    public function decideDelegation(int $id, bool $accept): void
+    {
+        $d = \App\Models\TaskDelegation::findOrFail($id);
+        $svc = app(TaskService::class);
+        $accept
+            ? $this->attempt(fn () => $svc->acceptDelegation($d, Auth::user()), 'Tugas diterima dan kini menjadi tanggung jawab Anda.')
+            : $this->attempt(fn () => $svc->rejectDelegation($d, Auth::user()), 'Permintaan alih tugas ditolak.');
+        unset($this->items, $this->counts);
+    }
+
+    public function decideCollaborator(int $taskId, int $userId, bool $approve): void
+    {
+        $this->attempt(fn () => app(TaskService::class)->decideCollaborator(Task::findOrFail($taskId), Auth::user(), $userId, $approve),
+            $approve ? 'Kolaborator disetujui.' : 'Usulan kolaborator ditolak.');
         unset($this->items, $this->counts);
     }
 

@@ -7,6 +7,7 @@ use App\Models\PresensiKegiatan;
 use App\Models\PresensiKehadiran;
 use App\Models\Task;
 use App\Models\TaskActivity;
+use App\Models\Team;
 use App\Models\User;
 use App\Support\Settings;
 use App\Support\WorkingDays;
@@ -22,6 +23,10 @@ use Illuminate\Support\Collection;
  *     Dihitung selesai bila sudah DIVERIFIKASI (status "selesai") paling lambat akhir bulan M.
  *  2. Kehadiran apel      = apel hadir ÷ apel yang wajib diikuti (izin/cuti/DL dikecualikan).
  *  3. Kehadiran rapat     = idem untuk rapat.
+ *
+ *     Tugas bersama dihitung untuk setiap pelaksananya (pelaksana utama + kolaborator).
+ *     KETUA TIM (tim utama maupun subtim): tanggungannya = tugas sendiri + SELURUH tugas di tim yang dipimpinnya
+ *     (ketua tim utama: termasuk seluruh subtimnya). Tugas anggota yang tidak selesai ikut mengurangi nilai ketua.
  *
  *  Nilai akhir = Σ(bobot × persentase) ÷ Σ bobot   (komponen tanpa data tidak ikut dihitung)
  *  Potongan TK : 100% → 0% · > batas (80%) → 1% · ≤ batas → 2%
@@ -86,7 +91,7 @@ class KinerjaService
         $isCurrent = $month->isSameMonth(now());
 
         return $users->mapWithKeys(function (User $u) use ($tugas, $presensi, $aktif, $lastActivity, $w, $isCurrent) {
-            $t = $tugas[$u->id] ?? ['total' => 0, 'selesai' => 0, 'carry' => 0, 'gagal' => 0, 'berjalan' => 0, 'items' => collect()];
+            $t = $tugas[$u->id] ?? ['total' => 0, 'selesai' => 0, 'carry' => 0, 'gagal' => 0, 'berjalan' => 0, 'items' => collect(), 'tim' => 0, 'tim_total' => 0, 'tim_selesai' => 0];
             $a = $presensi[$u->id]['apel'] ?? ['wajib' => 0, 'hadir' => 0, 'izin' => 0];
             $r = $presensi[$u->id]['rapat'] ?? ['wajib' => 0, 'hadir' => 0, 'izin' => 0];
 
@@ -129,6 +134,10 @@ class KinerjaService
                 'tugas_berjalan' => $t['berjalan'], // deadline belum lewat & belum selesai
                 'tugas_pct' => $pTugas,
                 'tugas_items' => $t['items'],
+                'tugas_tim' => $t['tim'],                // jumlah tugas tim (bukan milik sendiri) yang ikut dinilai
+                'tugas_tim_total' => $t['tim_total'],
+                'tugas_tim_selesai' => $t['tim_selesai'],
+                'ketua' => $t['tim'] > 0 || isset($tugas[$u->id]['ketua']),
                 'apel_wajib' => $a['wajib'], 'apel_hadir' => $a['hadir'], 'apel_izin' => $a['izin'], 'apel_pct' => $pApel,
                 'rapat_wajib' => $r['wajib'], 'rapat_hadir' => $r['hadir'], 'rapat_izin' => $r['izin'], 'rapat_pct' => $pRapat,
                 'nilai' => $nilai,
@@ -175,8 +184,30 @@ class KinerjaService
         $e = $end->toDateString();
         $today = now()->toDateString();
 
+        // Tim yang diawasi tiap ketua: tim yang dipimpin + subtim dari tim utama yang dipimpin
+        $led = \Illuminate\Support\Facades\DB::table('team_user')->whereIn('user_id', $ids)->where('role', 'ketua')->get(['user_id', 'team_id']);
+        $teams = Team::whereIn('id', $led->pluck('team_id'))->orWhereIn('parent_id', $led->pluck('team_id'))->get(['id', 'parent_id']);
+        $supervised = [];  // user_id => [team_id, ...]
+        foreach ($led as $r) {
+            $supervised[$r->user_id][] = (int) $r->team_id;
+            $team = $teams->firstWhere('id', $r->team_id);
+            if ($team && ! $team->parent_id) {
+                foreach ($teams->where('parent_id', $r->team_id) as $sub) {
+                    $supervised[$r->user_id][] = (int) $sub->id;
+                }
+            }
+        }
+        $allTeams = collect($supervised)->flatten()->unique()->values()->all();
+
+        $collab = \Illuminate\Support\Facades\DB::table('task_collaborators')->where('status', 'aktif')->whereIn('user_id', $ids)->get(['task_id', 'user_id']);
+
         $rows = Task::query()
-            ->whereIn('assignee_id', $ids)
+            ->where(function ($q) use ($ids, $allTeams, $collab) {
+                $q->whereIn('assignee_id', $ids)->orWhereIn('id', $collab->pluck('task_id')->unique());
+                if ($allTeams) {
+                    $q->orWhereIn('team_id', $allTeams);
+                }
+            })
             ->whereNotIn('status', ['batal', 'ditolak', 'pengajuan'])
             ->whereNotNull('due_date')
             ->whereRaw('COALESCE(extension_until, due_date) <= ?', [$e])
@@ -185,26 +216,60 @@ class KinerjaService
                     // carry-over: belum selesai saat bulan dimulai
                     ->orWhere(fn ($w) => $w->where('status', '!=', 'selesai')->orWhere('completed_at', '>=', $start));
             })
-            ->get(['id', 'code', 'title', 'assignee_id', 'status', 'due_date', 'extension_until', 'completed_at']);
+            ->get(['id', 'code', 'title', 'assignee_id', 'team_id', 'status', 'due_date', 'extension_until', 'completed_at']);
+
+        $collabByTask = $collab->groupBy('task_id')->map(fn ($g) => $g->pluck('user_id')->map(fn ($i) => (int) $i)->all());
+        $idSet = array_flip(array_map('intval', $ids));
 
         $out = [];
+        foreach ($supervised as $uid => $_) {
+            $out[$uid] = ['total' => 0, 'selesai' => 0, 'carry' => 0, 'gagal' => 0, 'berjalan' => 0, 'items' => collect(), 'tim' => 0, 'tim_total' => 0, 'tim_selesai' => 0, 'ketua' => true];
+        }
         foreach ($rows as $t) {
+            // Pemilik nilai tugas ini: pelaksana (pribadi) + ketua yang mengawasi timnya (tim)
+            $owners = [];
+            foreach (array_merge([(int) $t->assignee_id], $collabByTask[$t->id] ?? []) as $w) {
+                if (isset($idSet[$w])) {
+                    $owners[$w] = 'pribadi';
+                }
+            }
+            if ($t->team_id) {
+                foreach ($supervised as $uid => $tids) {
+                    if (! isset($owners[$uid]) && in_array((int) $t->team_id, $tids, true)) {
+                        $owners[$uid] = 'tim';
+                    }
+                }
+            }
+            if (! $owners) {
+                continue;
+            }
+
             $due = ($t->extension_until ?? $t->due_date)->toDateString();
             $done = $t->status === 'selesai' && $t->completed_at && $t->completed_at->lte($end);
             $carry = $due < $s;
-            $o = &$out[$t->assignee_id];
-            $o ??= ['total' => 0, 'selesai' => 0, 'carry' => 0, 'gagal' => 0, 'berjalan' => 0, 'items' => collect()];
             $pending = ! $done && $berjalan && $due >= $today;
-            if (! $pending) {
-                $o['total']++;
+
+            foreach ($owners as $uid => $src) {
+                $o = &$out[$uid];
+                $o ??= ['total' => 0, 'selesai' => 0, 'carry' => 0, 'gagal' => 0, 'berjalan' => 0, 'items' => collect(), 'tim' => 0, 'tim_total' => 0, 'tim_selesai' => 0];
+                if (! $pending) {
+                    $o['total']++;
+                    if ($src === 'tim') {
+                        $o['tim_total']++;
+                    }
+                }
+                $o['selesai'] += $done ? 1 : 0;
+                $o['carry'] += $carry ? 1 : 0;
+                if ($src === 'tim') {
+                    $o['tim']++;
+                    $o['tim_selesai'] += $done ? 1 : 0;
+                }
+                if (! $done) {
+                    $due < $today ? $o['gagal']++ : $o['berjalan']++;
+                }
+                $o['items']->push(['task' => $t, 'done' => $done, 'carry' => $carry, 'due' => $due, 'pending' => $pending, 'sumber' => $src]);
+                unset($o);
             }
-            $o['selesai'] += $done ? 1 : 0;
-            $o['carry'] += $carry ? 1 : 0;
-            if (! $done) {
-                $due < $today ? $o['gagal']++ : $o['berjalan']++;
-            }
-            $o['items']->push(['task' => $t, 'done' => $done, 'carry' => $carry, 'due' => $due, 'pending' => $pending]);
-            unset($o);
         }
 
         return $out;
@@ -215,8 +280,21 @@ class KinerjaService
     {
         $today = now()->toDateString();
 
-        return Task::query()->whereIn('assignee_id', $ids)->whereIn('status', Task::ACTIVE_STATUSES)
-            ->get(['assignee_id', 'status', 'due_date', 'extension_until'])
+        $collab = \Illuminate\Support\Facades\DB::table('task_collaborators')->where('status', 'aktif')->whereIn('user_id', $ids)->get(['task_id', 'user_id']);
+        $rows = Task::query()->whereIn('status', Task::ACTIVE_STATUSES)
+            ->where(fn ($q) => $q->whereIn('assignee_id', $ids)->orWhereIn('id', $collab->pluck('task_id')->unique()))
+            ->get(['id', 'assignee_id', 'status', 'due_date', 'extension_until']);
+        $expanded = collect();
+        foreach ($rows as $t) {
+            $who = array_unique(array_merge([(int) $t->assignee_id], $collab->where('task_id', $t->id)->pluck('user_id')->map(fn ($i) => (int) $i)->all()));
+            foreach ($who as $w) {
+                $c = clone $t;
+                $c->assignee_id = $w;
+                $expanded->push($c);
+            }
+        }
+
+        return $expanded->whereIn('assignee_id', $ids)
             ->groupBy('assignee_id')
             ->map(fn ($g) => [
                 'aktif' => $g->count(),

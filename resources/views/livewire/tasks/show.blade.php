@@ -5,6 +5,10 @@
     $due = $t->effectiveDueDate();
     $ooo = $this->reviewerOutOfOffice;
     $ext = $this->pendingExtension;
+    $workers = $this->workers;
+    $bersama = $workers->count() > 1;
+    $me = auth()->user();
+    $delegs = $this->pendingDelegations;
 @endphp
 <div>
     {{-- Breadcrumb --}}
@@ -30,6 +34,7 @@
                     <x-status :status="$t->status" />
                     <x-priority :priority="$t->priority" />
                     <span class="chip bg-navy-50 text-navy-700 ring-line">{{ \App\Models\Task::TYPES[$t->type] ?? $t->type }}</span>
+                    @if ($bersama)<span class="chip bg-violet-50 text-violet-700 ring-violet-600/20"><x-icon name="users" class="size-3.5" /> Tugas bersama · {{ $workers->count() }} orang</span>@endif
                     @if ($t->isOverdue())<span class="chip bg-rose-50 text-rose-700 ring-rose-600/20">Terlambat</span>@endif
                 </div>
                 <h1 class="mt-3 text-xl leading-snug font-extrabold tracking-tight sm:text-2xl">{{ $t->title }}</h1>
@@ -45,6 +50,44 @@
                     <div class="mt-5 flex gap-3 rounded-xl bg-amber-50 p-3.5 text-sm text-amber-900">
                         <x-icon name="plane" class="size-5 shrink-0" />
                         <p>{{ $t->verifier->display_name }} sedang <b>{{ $ooo->type_label }}</b> sampai {{ tgl($ooo->end_date) }}. Verifikasi tugas Anda otomatis dialihkan ke pimpinan saat diajukan.</p>
+                    </div>
+                @endif
+
+                {{-- Permintaan alih tugas --}}
+                @foreach ($delegs as $d)
+                    @if ($d->to_user_id === $me->id)
+                        <div class="mt-5 flex flex-col gap-3 rounded-xl bg-violet-50 p-3.5 text-sm text-violet-900 sm:flex-row sm:items-center" wire:key="dg-{{ $d->id }}">
+                            <x-icon name="forward" class="size-5 shrink-0" />
+                            <p class="flex-1"><b>{{ $d->from->display_name }}</b> meminta Anda mengambil alih tugas ini.{{ $d->note ? ' “'.$d->note.'”' : '' }}</p>
+                            <div class="flex gap-2">
+                                <button wire:click="decideDelegation({{ $d->id }}, true)" class="btn btn-green btn-sm"><x-icon name="check" class="size-4" /> Terima</button>
+                                <button wire:click="decideDelegation({{ $d->id }}, false)" wire:confirm="Tolak permintaan alih tugas?" class="btn btn-ghost btn-sm">Tolak</button>
+                            </div>
+                        </div>
+                    @elseif ($d->from_user_id === $me->id || $can['manage'])
+                        <div class="mt-5 flex flex-col gap-3 rounded-xl bg-paper p-3.5 text-sm sm:flex-row sm:items-center" wire:key="dg-{{ $d->id }}">
+                            <x-icon name="clock" class="size-5 shrink-0 text-navy-500" />
+                            <p class="flex-1"><b>{{ $d->from->display_name }}</b> mengalihkan tugas ke <b>{{ $d->to->display_name }}</b> — menunggu jawaban.</p>
+                            @if ($d->from_user_id === $me->id)<button wire:click="cancelDelegation({{ $d->id }})" class="btn btn-ghost btn-sm">Batalkan</button>@endif
+                        </div>
+                    @endif
+                @endforeach
+
+                {{-- Usulan kolaborator --}}
+                @if ($this->collabRequests->isNotEmpty())
+                    <div class="mt-5 rounded-xl bg-violet-50 p-3.5 text-sm text-violet-900">
+                        <p class="font-semibold">Usulan kolaborator menunggu persetujuan {{ $can['collabManage'] ? 'Anda' : 'pemberi tugas' }}</p>
+                        <ul class="mt-2 space-y-1.5">
+                            @foreach ($this->collabRequests as $r)
+                                <li class="flex items-center gap-2" wire:key="cr-{{ $r->id }}">
+                                    <x-avatar :user="$r" size="xs" /><span class="flex-1">{{ $r->display_name }}</span>
+                                    @if ($can['collabManage'])
+                                        <button wire:click="decideCollaborator({{ $r->id }}, true)" class="btn btn-green btn-sm">Setujui</button>
+                                        <button wire:click="decideCollaborator({{ $r->id }}, false)" class="btn btn-ghost btn-sm">Tolak</button>
+                                    @endif
+                                </li>
+                            @endforeach
+                        </ul>
                     </div>
                 @endif
 
@@ -64,6 +107,9 @@
                         <button wire:click="openAction('accept')" class="btn btn-green"><x-icon name="check" class="size-4" /> Setujui pengajuan</button>
                         <button wire:click="openAction('reject')" class="btn btn-danger"><x-icon name="x" class="size-4" /> Tolak</button>
                     @endif
+                    @if ($can['reviseDone'])
+                        <button wire:click="openAction('reviseDone')" class="btn btn-orange"><x-icon name="rotate" class="size-4" /> Minta revisi</button>
+                    @endif
                     @if ($can['delegate'])
                         <button @click="$dispatch('open-task-form', { mode: 'delegate', parent: {{ $t->id }} })" class="btn btn-ghost"><x-icon name="forward" class="size-4" /> Teruskan ke anggota</button>
                     @endif
@@ -72,10 +118,13 @@
                         @if ($can['edit'])
                             <button @click="$dispatch('open-task-form', { mode: 'edit', task: {{ $t->id }} })" class="btn btn-ghost"><x-icon name="pencil" class="size-4" /> Ubah</button>
                         @endif
-                        @if ($can['extension'] || $can['cancel'] || $can['reopen'] || $can['delete'])
+                        @if ($can['extension'] || $can['cancel'] || $can['reopen'] || $can['delete'] || $can['delegateOut'] || $can['collabAdd'] || $can['split'])
                             <div class="relative">
                                 <button @click="more = !more" class="btn btn-ghost px-2.5" aria-label="Aksi lainnya"><x-icon name="dots" class="size-5" /></button>
-                                <div x-show="more" x-cloak @click.outside="more = false" class="absolute right-0 z-20 mt-2 w-56 rounded-2xl border border-line bg-white p-1.5 shadow-xl">
+                                <div x-show="more" x-cloak @click.outside="more = false" class="absolute right-0 z-20 mt-2 w-64 rounded-2xl border border-line bg-white p-1.5 shadow-xl">
+                                    @if ($can['delegateOut'])<button wire:click="openAction('delegateOut')" @click="more=false" class="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm hover:bg-navy-50"><x-icon name="forward" class="size-4" /> Alihkan ke pegawai lain</button>@endif
+                                    @if ($can['collabAdd'])<button wire:click="openAction('collab')" @click="more=false" class="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm hover:bg-navy-50"><x-icon name="users" class="size-4" /> {{ $bersama ? 'Tambah kolaborator' : 'Jadikan tugas bersama' }}</button>@endif
+                                    @if ($can['split'])<button wire:click="openAction('split')" @click="more=false" class="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm hover:bg-navy-50"><x-icon name="list" class="size-4" /> Pecah jadi tugas masing-masing</button>@endif
                                     @if ($can['extension'])<button wire:click="openAction('extension')" @click="more=false" class="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm hover:bg-navy-50"><x-icon name="clock" class="size-4" /> Ajukan perpanjangan</button>@endif
                                     @if ($can['reopen'])<button wire:click="openAction('reopen')" @click="more=false" class="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm hover:bg-navy-50"><x-icon name="rotate" class="size-4" /> Buka kembali</button>@endif
                                     @if ($can['cancel'])<button wire:click="openAction('cancel')" @click="more=false" class="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm text-bps-orange-700 hover:bg-bps-orange-50"><x-icon name="x" class="size-4" /> Batalkan tugas</button>@endif
@@ -182,7 +231,20 @@
                     </p>
                 </div>
                 <dl class="divide-y divide-line text-sm">
-                    @foreach ([['Pelaksana', $t->assignee], ['Pemberi tugas', $t->creator], ['Verifikator', $t->verifier]] as [$label, $person])
+                    <div class="flex gap-3 px-5 py-3">
+                        <dt class="w-28 shrink-0 pt-0.5 text-navy-500">{{ $bersama ? 'Pelaksana ('.$workers->count().')' : 'Pelaksana' }}</dt>
+                        <dd class="min-w-0 flex-1 space-y-1.5">
+                            @foreach ($workers as $w)
+                                <div class="group flex items-center gap-2" wire:key="wk-{{ $w->id }}">
+                                    <x-avatar :user="$w" size="xs" /><span class="min-w-0 flex-1 truncate font-medium">{{ $w->display_name }}</span>
+                                    @if ($bersama && $can['collabManage'])
+                                        <button wire:click="removeWorker({{ $w->id }})" wire:confirm="Keluarkan {{ $w->display_name }} dari tugas ini?" class="rounded p-0.5 text-navy-300 hover:text-rose-600" title="Keluarkan dari tugas"><x-icon name="x" class="size-3.5" /></button>
+                                    @endif
+                                </div>
+                            @endforeach
+                        </dd>
+                    </div>
+                    @foreach ([['Pemberi tugas', $t->creator], ['Verifikator', $t->verifier]] as [$label, $person])
                         <div class="flex items-center gap-3 px-5 py-3">
                             <dt class="w-28 text-navy-500">{{ $label }}</dt>
                             <dd class="flex min-w-0 flex-1 items-center gap-2">
@@ -190,7 +252,7 @@
                             </dd>
                         </div>
                     @endforeach
-                    <div class="flex px-5 py-3"><dt class="w-28 text-navy-500">Tim</dt><dd class="font-medium">{{ $t->team?->name ?? '–' }}</dd></div>
+                    <div class="flex px-5 py-3"><dt class="w-28 text-navy-500">Tim</dt><dd class="font-medium">{{ $t->team?->fullName() ?? '–' }}</dd></div>
                     <div class="flex px-5 py-3"><dt class="w-28 text-navy-500">Mulai</dt><dd class="font-medium">{{ tgl($t->start_date) }}</dd></div>
                     <div class="flex px-5 py-3"><dt class="w-28 text-navy-500">Deadline</dt>
                         <dd class="font-medium {{ $t->isOverdue() ? 'text-rose-600' : '' }}">
@@ -233,20 +295,46 @@
     @php
         $modals = [
             'submit' => ['Tandai tugas selesai', 'Hasil kerja akan dikirim ke '.($t->verifier?->display_name ?? 'verifikator').' untuk diverifikasi.', 'Kirim untuk verifikasi', 'btn-green', 'Catatan untuk verifikator (opsional)'],
-            'approve' => ['Setujui hasil kerja', 'Tugas akan tercatat selesai untuk '.$t->assignee->display_name.'.', 'Setujui', 'btn-green', 'Catatan (opsional)'],
+            'approve' => ['Setujui hasil kerja', 'Tugas akan tercatat selesai untuk '.$workers->pluck('display_name')->join(', ', ' dan ').'.', 'Setujui', 'btn-green', 'Catatan (opsional)'],
             'revise' => ['Minta revisi', 'Jelaskan apa yang perlu diperbaiki. Tugas kembali ke pelaksana.', 'Kirim permintaan revisi', 'btn-orange', 'Catatan revisi (wajib)'],
             'accept' => ['Setujui pengajuan mandiri', 'Tugas masuk ke daftar kerja '.$t->assignee->display_name.' dan ikut dihitung pada matriks bulan deadline-nya.', 'Setujui pengajuan', 'btn-green', null],
             'reject' => ['Tolak pengajuan', 'Beri alasan penolakan agar pegawai memahami.', 'Tolak pengajuan', 'btn-danger', 'Alasan (wajib)'],
-            'cancel' => ['Batalkan tugas', 'Tugas tidak lagi dihitung dalam beban kerja.', 'Batalkan tugas', 'btn-danger', 'Alasan (opsional)'],
+            'cancel' => ['Batalkan tugas', ($t->status === 'selesai' ? 'Tugas yang sudah selesai dibatalkan dan tidak lagi dihitung dalam kinerja.' : 'Tugas tidak lagi dihitung dalam beban kerja.'), 'Batalkan tugas', 'btn-danger', 'Alasan (opsional)'],
             'reopen' => ['Buka kembali tugas', 'Status kembali menjadi “Sedang dikerjakan” dan tugas tidak lagi dihitung selesai.', 'Buka kembali', 'btn-primary', null],
             'extension' => ['Ajukan perpanjangan waktu', 'Bila disetujui, deadline baru dipakai untuk menentukan bulan perhitungan tugas ini.', 'Kirim pengajuan', 'btn-blue', 'Alasan (wajib)'],
             'delete' => ['Hapus tugas', 'Tugas dihapus dari daftar. Riwayat tetap tersimpan untuk audit.', 'Hapus', 'btn-danger', null],
+            'reviseDone' => ['Minta revisi tugas yang sudah selesai', 'Tugas kembali ke “Perlu revisi” dan tidak lagi dihitung selesai sampai diverifikasi ulang.', 'Kirim permintaan revisi', 'btn-orange', 'Catatan revisi (wajib)'],
+            'delegateOut' => ['Alihkan ke pegawai lain', 'Penerima bisa menerima atau menolak. Selama belum diterima, tugas tetap tanggung jawab Anda.', 'Kirim permintaan', 'btn-blue', null],
+            'collab' => [$bersama ? 'Tambah kolaborator' : 'Jadikan tugas bersama', $can['collabManage'] ? 'Pegawai terpilih langsung ikut mengerjakan tugas ini (satu tugas, dikerjakan bersama).' : 'Usulan dikirim ke pemberi tugas untuk disetujui.', $can['collabManage'] ? 'Tambahkan' : 'Kirim usulan', 'btn-blue', null],
+            'split' => ['Pecah jadi tugas masing-masing', 'Setiap kolaborator mendapat salinan tugasnya sendiri (status, progres, surat tugas & dokumen ikut). Tugas ini tetap milik '.$t->assignee->display_name.'.', 'Pecah tugas', 'btn-primary', null],
         ];
         $m = $actionModal ? $modals[$actionModal] : null;
     @endphp
     <x-modal :show="(bool) $m" close="$set('actionModal', null)" :title="$m[0] ?? ''" :subtitle="$m[1] ?? null">
         @if ($actionModal === 'submit' && ($att->get('output', collect())->isEmpty()))
             <div class="mb-4 flex gap-2 rounded-xl bg-bps-orange-50 p-3 text-sm text-bps-orange-700"><x-icon name="alert" class="size-5 shrink-0" /> Belum ada output/bukti dukung. Unggah file, gambar, atau link di seksi “Output / hasil kerja” terlebih dahulu.</div>
+        @endif
+        @if (in_array($actionModal, ['delegateOut', 'collab']))
+            <input wire:model.live.debounce.250ms="peopleSearch" type="search" placeholder="Cari nama / jabatan" class="input mb-2 py-2">
+            <div class="mb-4 max-h-64 space-y-0.5 overflow-y-auto rounded-xl border border-line p-1">
+                @forelse ($this->people as $p)
+                    @php $sel = $actionModal === 'delegateOut' ? $delegateTo === $p->id : in_array($p->id, $collabIds); @endphp
+                    <button type="button" wire:key="pp-{{ $p->id }}" wire:click="{{ $actionModal === 'delegateOut' ? '$set(\'delegateTo\', '.$p->id.')' : 'toggleCollab('.$p->id.')' }}"
+                            class="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left {{ $sel ? 'bg-bps-blue-50' : 'hover:bg-paper' }}">
+                        <x-avatar :user="$p" size="xs" />
+                        <span class="min-w-0 flex-1"><span class="block truncate text-sm font-medium">{{ $p->display_name }}</span><span class="block truncate text-[11px] text-navy-500">{{ $p->teams->pluck('name')->join(', ') ?: $p->jabatan }}</span></span>
+                        <span class="grid size-5 place-items-center {{ $actionModal === 'delegateOut' ? 'rounded-full' : 'rounded-md' }} border {{ $sel ? 'border-bps-blue bg-bps-blue text-white' : 'border-navy-100' }}">@if ($sel)<x-icon name="check" class="size-3.5" />@endif</span>
+                    </button>
+                @empty
+                    <p class="px-2 py-3 text-sm text-navy-500">Tidak ada pegawai yang cocok.</p>
+                @endforelse
+            </div>
+            @error('delegateTo') <p class="error -mt-2 mb-3">{{ $message }}</p> @enderror
+            @error('collab') <p class="error -mt-2 mb-3">{{ $message }}</p> @enderror
+            @if ($actionModal === 'delegateOut')
+                <label class="label">Pesan untuk penerima (opsional)</label>
+                <textarea wire:model="delegateNote" rows="2" class="input" placeholder="mis. Saya sedang dinas luar, mohon bantuannya."></textarea>
+            @endif
         @endif
         @if ($actionModal === 'extension')
             <label class="label">Perpanjang sampai</label>

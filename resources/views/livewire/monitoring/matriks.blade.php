@@ -99,12 +99,14 @@
                 <x-potongan :value="$detail['potongan']" class="text-sm" />
             </div>
             <h3 class="mt-5 mb-2 text-sm font-bold">Tugas tanggungan bulan ini ({{ $detail['tugas_semua'] }})</h3>
+            @if ($detail['tugas_tim'])<p class="mb-2 text-xs text-navy-500">Sebagai ketua tim, penilaiannya ikut menghitung {{ $detail['tugas_tim'] }} tugas anggota tim (label <b>Tim</b>).</p>@endif
             <ul class="divide-y divide-line rounded-2xl border border-line">
                 @forelse ($detail['tugas_items'] as $it)
                     <li class="flex items-center gap-3 px-4 py-2.5 text-sm">
                         <span class="grid size-6 shrink-0 place-items-center rounded-full {{ $it['done'] ? 'bg-bps-green text-white' : ($it['pending'] ? 'bg-bps-blue-50 text-bps-blue-700' : 'bg-rose-50 text-rose-600') }}" title="{{ $it['done'] ? 'Selesai' : ($it['pending'] ? 'Belum jatuh tempo' : 'Belum selesai, lewat deadline') }}"><x-icon :name="$it['done'] ? 'check' : ($it['pending'] ? 'clock' : 'x')" class="size-3.5" /></span>
                         <a href="{{ route('tasks.show', $it['task']->id) }}" wire:navigate class="min-w-0 flex-1 truncate hover:text-bps-blue-700">{{ $it['task']->title }}</a>
-                        @if ($it['carry'])<span class="chip bg-rose-50 text-rose-700 ring-rose-600/20">Tunggakan</span>@endif
+                        @if (($it['sumber'] ?? 'pribadi') === 'tim')<span class="chip bg-violet-50 text-violet-700 ring-violet-600/20" title="Tugas anggota tim yang Anda pimpin">Tim</span>@endif
+                                    @if ($it['carry'])<span class="chip bg-rose-50 text-rose-700 ring-rose-600/20">Tunggakan</span>@endif
                         <span class="text-xs whitespace-nowrap text-navy-500">{{ tgl($it['due'], 'j M') }}</span>
                     </li>
                 @empty

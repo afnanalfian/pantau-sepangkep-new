@@ -40,7 +40,7 @@
             </select>
             <select wire:model.live="team" class="input w-auto py-2">
                 <option value="">Semua tim</option>
-                @foreach ($this->teams as $tm)<option value="{{ $tm->id }}">{{ $tm->name }}</option>@endforeach
+                @foreach ($this->teams as $tm)<option value="{{ $tm->id }}">{{ $tm->parent_id ? '— '.$tm->name : $tm->name }}</option>@endforeach
             </select>
             @if ($view === 'list')
                 <select wire:model.live="status" class="input w-auto py-2">
@@ -109,7 +109,7 @@
                                     <a href="{{ route('tasks.show', $t) }}" wire:navigate class="font-semibold hover:text-bps-blue-700">{{ $t->title }}</a>
                                     <p class="text-xs text-navy-500">{{ $t->code }}{{ $t->team ? ' · '.$t->team->name : '' }}</p>
                                 </td>
-                                <td class="px-3 py-3"><span class="flex items-center gap-2"><x-avatar :user="$t->assignee" size="xs" /><span class="truncate">{{ $t->assignee->display_name }}</span></span></td>
+                                <td class="px-3 py-3"><span class="flex items-center gap-2"><x-avatar :user="$t->assignee" size="xs" /><span class="truncate">{{ $t->assignee->display_name }}{{ $t->collaborators->isNotEmpty() ? ' +'.$t->collaborators->count() : '' }}</span></span></td>
                                 <td class="px-3 py-3"><x-status :status="$t->status" /></td>
                                 <td class="px-3 py-3"><x-priority :priority="$t->priority" /></td>
                                 <td class="px-5 py-3 text-xs {{ $t->isOverdue() ? 'font-semibold text-rose-600' : 'text-navy-500' }}">{{ $t->effectiveDueDate() ? tgl($t->effectiveDueDate()) : '–' }}</td>

@@ -29,12 +29,22 @@ class Teams extends Component
 
     public string $description = '';
 
+    public ?int $parent_id = null;
+
     public ?int $confirmDeleteId = null;
 
     #[Computed]
     public function teams()
     {
-        return Team::with('members')->orderBy('sort_order')->orderBy('id')->get();
+        // Tim utama diikuti subtimnya
+        return Team::with(['members', 'parent'])->orderByRaw('COALESCE(parent_id, id)')->orderByRaw('parent_id IS NOT NULL')
+            ->orderBy('sort_order')->orderBy('id')->get();
+    }
+
+    #[Computed]
+    public function mainTeams()
+    {
+        return Team::whereNull('parent_id')->orderBy('sort_order')->get();
     }
 
     #[Computed]
@@ -66,6 +76,12 @@ class Teams extends Component
         if ($to === 'pool') {
             if ($from !== 'pool') {
                 $team = Team::find($from);
+                if ($team && ($err = app(\App\Services\TeamService::class)->removalError($team, $user))) {
+                    $this->toast($err, 'error');
+                    $this->refreshData();
+
+                    return;
+                }
                 $team?->members()->detach($user->id);
                 $this->toast($user->display_name.' dikeluarkan dari '.$team?->name.'.');
             }
@@ -88,10 +104,21 @@ class Teams extends Component
             return;
         }
 
+        if ($err = app(\App\Services\TeamService::class)->membershipError($target, $user)) {
+            $this->toast($err, 'error');
+            $this->refreshData();
+
+            return;
+        }
+        if ($from !== 'pool' && $this->mode === 'move' && ($err = app(\App\Services\TeamService::class)->removalError(Team::find($from), $user))) {
+            $this->toast($err, 'error');
+            $this->refreshData();
+
+            return;
+        }
         if ($from !== 'pool' && $this->mode === 'move') {
             Team::find($from)?->members()->detach($user->id);
         }
-
         if (! $target->members()->where('users.id', $user->id)->exists()) {
             $target->members()->attach($user->id, ['role' => 'anggota', 'sort_order' => (int) $position]);
         }
@@ -107,6 +134,11 @@ class Teams extends Component
             return;
         }
         $isLeader = $member->pivot->role === 'ketua';
+        if (! $isLeader && ($err = app(\App\Services\TeamService::class)->membershipError($team, $member, 'ketua'))) {
+            $this->toast($err, 'error');
+
+            return;
+        }
         $team->members()->updateExistingPivot($userId, ['role' => $isLeader ? 'anggota' : 'ketua']);
         $this->toast($member->display_name.($isLeader ? ' bukan lagi ketua ' : ' ditetapkan sebagai Ketua ').$team->name.'.');
         $this->refreshData();
@@ -114,7 +146,13 @@ class Teams extends Component
 
     public function removeMember(int $teamId, int $userId): void
     {
-        Team::findOrFail($teamId)->members()->detach($userId);
+        $team = Team::findOrFail($teamId);
+        if ($err = app(\App\Services\TeamService::class)->removalError($team, User::findOrFail($userId))) {
+            $this->toast($err, 'error');
+
+            return;
+        }
+        $team->members()->detach($userId);
         $this->refreshData();
     }
 
@@ -136,7 +174,7 @@ class Teams extends Component
 
     public function create(): void
     {
-        $this->reset('editId', 'name', 'description');
+        $this->reset('editId', 'name', 'description', 'parent_id');
         $this->color = collect(array_keys(Team::COLORS))->random();
         $this->showForm = true;
     }
@@ -148,6 +186,7 @@ class Teams extends Component
         $this->name = $t->name;
         $this->color = $t->color;
         $this->description = (string) $t->description;
+        $this->parent_id = $t->parent_id;
         $this->showForm = true;
     }
 
@@ -157,17 +196,38 @@ class Teams extends Component
             'name' => 'required|string|max:100',
             'color' => 'required|in:'.implode(',', array_keys(Team::COLORS)),
             'description' => 'nullable|string|max:500',
-        ], [], ['name' => 'nama tim']);
+            'parent_id' => 'nullable|exists:teams,id',
+        ], [], ['name' => 'nama tim', 'parent_id' => 'tim induk']);
+        $parent = $this->parent_id ? Team::find($this->parent_id) : null;
+        if ($parent && ($parent->parent_id || $parent->id === $this->editId)) {
+            $this->addError('parent_id', 'Tim induk harus tim utama.');
+
+            return;
+        }
+        if ($parent && $this->editId && Team::where('parent_id', $this->editId)->exists()) {
+            $this->addError('parent_id', 'Tim ini punya subtim, sehingga tidak bisa dijadikan subtim.');
+
+            return;
+        }
+        if ($parent && $this->editId) {
+            $t = Team::with('members')->findOrFail($this->editId);
+            $leaders = $parent->leaderIds();
+            if ($t->members->pluck('id')->intersect($leaders)->isNotEmpty()) {
+                $this->addError('parent_id', 'Ketua '.$parent->name.' masih menjadi anggota tim ini.');
+
+                return;
+            }
+        }
 
         if ($this->editId) {
-            Team::findOrFail($this->editId)->update(['name' => $this->name, 'color' => $this->color, 'description' => $this->description]);
+            Team::findOrFail($this->editId)->update(['name' => $this->name, 'color' => $this->color, 'description' => $this->description, 'parent_id' => $this->parent_id ?: null]);
         } else {
             $slug = Str::slug($this->name);
             if (Team::where('slug', $slug)->exists()) {
                 $slug .= '-'.Str::lower(Str::random(4));
             }
             Team::create([
-                'name' => $this->name, 'slug' => $slug, 'color' => $this->color, 'description' => $this->description,
+                'name' => $this->name, 'slug' => $slug, 'color' => $this->color, 'description' => $this->description, 'parent_id' => $this->parent_id ?: null,
                 'sort_order' => (int) Team::max('sort_order') + 1,
             ]);
         }
@@ -188,7 +248,12 @@ class Teams extends Component
         $t = Team::findOrFail($this->confirmDeleteId);
         if ($t->is_core) {
             $this->toast('Tim utama tidak dapat dihapus (bisa dinonaktifkan).', 'error');
+        } elseif (Team::where('parent_id', $t->id)->exists()) {
+            $this->toast('Hapus atau pindahkan dulu subtim di bawah '.$t->name.'.', 'error');
         } else {
+            if ($t->parent_id) {
+                \App\Models\Task::withTrashed()->where('team_id', $t->id)->update(['team_id' => $t->parent_id]);
+            }
             $t->delete();
             $this->toast('Tim dihapus.');
         }
@@ -198,7 +263,7 @@ class Teams extends Component
 
     private function refreshData(): void
     {
-        unset($this->teams, $this->pool);
+        unset($this->teams, $this->pool, $this->mainTeams);
     }
 
     public function render()

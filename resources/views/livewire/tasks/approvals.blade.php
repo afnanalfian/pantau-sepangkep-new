@@ -3,7 +3,7 @@
     <x-page-header title="Persetujuan & verifikasi" subtitle="Batas waktu tinjauan {{ \App\Support\Settings::get('sla_hours') }} jam kerja. Lewat batas, tugas otomatis {{ \App\Support\Settings::get('sla_action') === 'auto_approve' ? 'disetujui sistem' : 'dieskalasi ke pimpinan' }}." />
 
     <div class="mb-5 flex gap-1 overflow-x-auto">
-        @foreach (['review' => ['Hasil kerja', $c['review']], 'pengajuan' => ['Pengajuan mandiri', $c['pengajuan']], 'perpanjangan' => ['Perpanjangan waktu', $c['perpanjangan']]] as $k => [$label, $n])
+        @foreach (['review' => ['Hasil kerja', $c['review']], 'pengajuan' => ['Pengajuan mandiri', $c['pengajuan']], 'perpanjangan' => ['Perpanjangan waktu', $c['perpanjangan']], 'delegasi' => ['Alih tugas', $c['delegasi']], 'kolaborator' => ['Usulan kolaborator', $c['kolaborator']]] as $k => [$label, $n])
             <button wire:click="$set('tab', '{{ $k }}')" class="tab inline-flex shrink-0 items-center gap-2 {{ $tab === $k ? 'active' : '' }}">{{ $label }}
                 @if ($n)<span class="rounded-full bg-bps-orange px-1.5 text-[11px] font-bold text-white">{{ $n }}</span>@endif</button>
         @endforeach
@@ -13,6 +13,42 @@
     </div>
 
     <div class="space-y-3">
+        @if ($tab === 'delegasi')
+            @forelse ($this->items as $d)
+                <article class="card flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:p-5" wire:key="dl-{{ $d->id }}">
+                    <x-avatar :user="$d->from" />
+                    <div class="min-w-0 flex-1">
+                        <a href="{{ route('tasks.show', $d->task) }}" wire:navigate class="font-semibold hover:text-bps-blue-700">{{ $d->task->title }}</a>
+                        <p class="mt-0.5 text-sm text-navy-500"><b class="text-navy-700">{{ $d->from->display_name }}</b> meminta Anda mengambil alih tugas ini · {{ $d->task->code }}{{ $d->task->due_date ? ' · deadline '.tgl($d->task->effectiveDueDate(), 'j M') : '' }}</p>
+                        @if ($d->note)<p class="mt-1 text-sm">“{{ $d->note }}”</p>@endif
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                        <a href="{{ route('tasks.show', $d->task) }}" wire:navigate class="btn btn-ghost btn-sm"><x-icon name="eye" class="size-4" /> Lihat</a>
+                        <button wire:click="decideDelegation({{ $d->id }}, true)" class="btn btn-green btn-sm"><x-icon name="check" class="size-4" /> Terima</button>
+                        <button wire:click="decideDelegation({{ $d->id }}, false)" wire:confirm="Tolak permintaan alih tugas ini?" class="btn btn-danger btn-sm">Tolak</button>
+                    </div>
+                </article>
+            @empty
+                <div class="card"><x-empty icon="check-circle" title="Tidak ada permintaan" text="Belum ada pegawai yang mengalihkan tugas kepada Anda." /></div>
+            @endforelse
+        @elseif ($tab === 'kolaborator')
+            @forelse ($this->items as $r)
+                <article class="card flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:p-5" wire:key="kb-{{ $r->row->id }}">
+                    <x-avatar :user="$r->user" />
+                    <div class="min-w-0 flex-1">
+                        <p class="font-semibold">{{ $r->user?->display_name }} <span class="font-normal text-navy-500">diusulkan ikut mengerjakan</span></p>
+                        <a href="{{ route('tasks.show', $r->task) }}" wire:navigate class="text-sm hover:text-bps-blue-700">{{ $r->task->code }} · {{ $r->task->title }}</a>
+                        <p class="mt-0.5 text-xs text-navy-500">Diusulkan oleh {{ $r->by?->display_name }}</p>
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                        <button wire:click="decideCollaborator({{ $r->task->id }}, {{ $r->user->id }}, true)" class="btn btn-green btn-sm"><x-icon name="check" class="size-4" /> Setujui</button>
+                        <button wire:click="decideCollaborator({{ $r->task->id }}, {{ $r->user->id }}, false)" class="btn btn-ghost btn-sm">Tolak</button>
+                    </div>
+                </article>
+            @empty
+                <div class="card"><x-empty icon="check-circle" title="Tidak ada usulan" text="Tidak ada usulan kolaborator yang menunggu persetujuan Anda." /></div>
+            @endforelse
+        @else
         @forelse ($this->items as $t)
             @php $sla = $tab !== 'perpanjangan' ? $this->slaDeadline($t) : null; @endphp
             <article class="card flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:p-5" wire:key="ap-{{ $t->id }}">
@@ -45,6 +81,7 @@
         @empty
             <div class="card"><x-empty icon="check-circle" title="Semua beres" text="Tidak ada yang menunggu tindakan Anda di sini." /></div>
         @endforelse
+        @endif
     </div>
 
     <x-modal :show="(bool) $noteFor" close="$set('noteFor', null)" :title="$noteType === 'reject' ? 'Tolak pengajuan' : 'Minta revisi'">

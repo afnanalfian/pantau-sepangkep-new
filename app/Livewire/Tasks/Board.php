@@ -42,13 +42,16 @@ class Board extends Component
         if (! in_array($this->scope, $this->scopes())) {
             $this->scope = 'mine';
         }
+        if ($this->team && ! $this->teams->contains('id', (int) $this->team)) {
+            $this->team = '';
+        }
     }
 
     public function scopes(): array
     {
         $u = Auth::user();
         $s = ['mine', 'created'];
-        if ($u->isLeader()) {
+        if ($u->supervisedTeamIds()->isNotEmpty()) {
             $s[] = 'team';
         }
         if ($u->is_pimpinan || $u->is_admin) {
@@ -74,18 +77,18 @@ class Board extends Component
     protected function baseQuery()
     {
         $u = Auth::user();
-        $q = Task::query()->with(['assignee', 'team', 'creator'])
+        $q = Task::query()->with(['assignee', 'team', 'creator', 'collaborators'])
             ->withCount(['attachments', 'comments', 'children'])
             ->whereNotIn('status', ['batal']);
 
         match ($this->scope) {
             'created' => $q->where('creator_id', $u->id)->where('assignee_id', '!=', $u->id),
             'team' => $q->where(function ($w) use ($u) {
-                $ids = $u->ledTeamIds();
+                $ids = $u->supervisedTeamIds();
                 $w->whereIn('team_id', $ids)->orWhereIn('assignee_id', fn ($s) => $s->select('user_id')->from('team_user')->whereIn('team_id', $ids));
             }),
             'all' => $q,
-            default => $q->where('assignee_id', $u->id),
+            default => $q->forWorker($u->id),
         };
 
         return $q
@@ -117,10 +120,17 @@ class Board extends Component
         return $this->baseQuery()->where('status', 'pengajuan')->latest()->get();
     }
 
+    /** Filter tim: hanya tim yang diikuti user (pimpinan & admin: semua tim). */
     #[Computed]
     public function teams()
     {
-        return Team::where('is_active', true)->orderBy('sort_order')->get();
+        $u = Auth::user();
+        $q = Team::with('parent')->where('is_active', true)->orderByRaw('COALESCE(parent_id, id)')->orderByRaw('parent_id IS NOT NULL')->orderBy('sort_order');
+        if (! $u->is_pimpinan && ! $u->is_admin) {
+            $q->whereIn('id', $u->memberTeamIds());
+        }
+
+        return $q->get();
     }
 
     /** Drag & drop dari papan Kanban (wire:sort). */
